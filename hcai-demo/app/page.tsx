@@ -1,4 +1,3 @@
-
 "use client";
 
 import Link from "next/link";
@@ -7,7 +6,6 @@ import { motion } from "framer-motion";
 export default function HomePage() {
   return (
     <main className="min-h-screen bg-gradient-to-br from-slate-100 to-slate-200 flex flex-col items-center justify-center p-10">
-      
       <motion.h1
         initial={{ opacity: 0, y: -20 }}
         animate={{ opacity: 1, y: 0 }}
@@ -27,8 +25,13 @@ export default function HomePage() {
           className="rounded-2xl w-full object-contain"
         />
 
-        <div className="flex flex-col md:flex-row gap-6 justify-center mt-10">
-          
+        <p className="mt-8 text-slate-500 text-sm text-center max-w-3xl mx-auto leading-relaxed">
+          A research-oriented interactive framework for integrating
+          end-user perception assessment and organizational maturity
+          evaluation in Human-Centered AI systems.
+        </p>
+
+        <div className="flex flex-col md:flex-row gap-10 justify-center items-center mt-10">
           <Link href="/end-user">
             <motion.button
               whileHover={{ scale: 1.05 }}
@@ -48,16 +51,25 @@ export default function HomePage() {
               Organization User
             </motion.button>
           </Link>
+        </div>
 
+        <p className="mt-8 text-purple-600 text-sm font-semibold text-center max-w-3xl mx-auto">
+          Complete both End User and Organization User assessments before using
+          "Diagnose the Impact Gap" to generate integrated insights.
+        </p>
+
+        <div className="flex justify-center mt-5">
+          <Link href="/results">
+            <motion.button
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.96 }}
+              className="bg-purple-600 hover:bg-purple-700 text-white text-xl font-semibold px-10 py-5 rounded-2xl shadow-lg transition-all"
+            >
+              Diagnose the Impact Gap
+            </motion.button>
+          </Link>
         </div>
       </motion.div>
-
-      <p className="mt-8 text-slate-500 text-sm text-center max-w-3xl">
-        A research-oriented interactive framework for integrating
-        end-user perception assessment and organizational maturity
-        evaluation in Human-Centered AI systems.
-      </p>
     </main>
   );
 }
-
