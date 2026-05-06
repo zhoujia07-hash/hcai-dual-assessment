@@ -137,6 +137,15 @@ export default function OrganizationPage() {
 
   const submitAssessment = () => {
     setSubmitted(true);
+
+  localStorage.setItem(
+  "organizationResults",
+  JSON.stringify({
+    phase,
+    pre: answers.pre,
+    post: answers.post,
+  })
+  );
   };
 
   const currentAnswers = answers[phase];

@@ -212,6 +212,7 @@ export default function EndUserPage() {
     );
 
     setResults(computedResults);
+    localStorage.setItem("hucasResults", JSON.stringify(computedResults));
   };
 
   return (
