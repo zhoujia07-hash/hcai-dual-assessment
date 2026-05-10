@@ -26,35 +26,35 @@ export default function HomePage() {
         />
 
         <p className="mt-8 text-slate-500 text-sm text-center max-w-3xl mx-auto leading-relaxed">
-          A research-oriented interactive framework for integrating
-          end-user perception assessment and organizational maturity
-          evaluation in Human-Centered AI systems.
+          A lifecycle-oriented dual-assessment framework: integrating objective organizational hcai capabilities and subjective end-user perceptions.
         </p>
 
-        <div className="flex flex-col md:flex-row gap-10 justify-center items-center mt-10">
-          <Link href="/end-user">
-            <motion.button
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.96 }}
-              className="bg-blue-600 hover:bg-blue-700 text-white text-xl font-semibold px-10 py-5 rounded-2xl shadow-lg transition-all"
-            >
-              End User
-            </motion.button>
-          </Link>
+        <div className="flex flex-col md:flex-row gap-6 justify-center mt-10">
 
-          <Link href="/organization">
-            <motion.button
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.96 }}
-              className="bg-green-600 hover:bg-green-700 text-white text-xl font-semibold px-10 py-5 rounded-2xl shadow-lg transition-all"
-            >
-              Organization User
-            </motion.button>
-          </Link>
-        </div>
+  <Link href="/organization">
+    <motion.button
+      whileHover={{ scale: 1.05 }}
+      whileTap={{ scale: 0.96 }}
+      className="bg-green-600 hover:bg-green-700 text-white text-xl font-semibold px-10 py-5 rounded-2xl shadow-lg transition-all"
+    >
+      Organization User
+    </motion.button>
+  </Link>
+
+  <Link href="/end-user">
+    <motion.button
+      whileHover={{ scale: 1.05 }}
+      whileTap={{ scale: 0.96 }}
+      className="bg-blue-600 hover:bg-blue-700 text-white text-xl font-semibold px-10 py-5 rounded-2xl shadow-lg transition-all"
+    >
+      End User
+    </motion.button>
+  </Link>
+
+</div>
 
         <p className="mt-8 text-purple-600 text-sm font-semibold text-center max-w-3xl mx-auto">
-          Complete both End User and Organization User assessments before using
+          Complete both  Organization User and End User assessments before using
           "Diagnose the Impact Gap" to generate integrated insights.
         </p>
 

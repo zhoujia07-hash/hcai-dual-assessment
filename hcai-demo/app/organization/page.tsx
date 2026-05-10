@@ -11,100 +11,52 @@ const levelLabels = [
   "Level 2: Defined",
   "Level 3: Participatory",
   "Level 4: Measured",
-  "Level 5: Continuous Improvement",
+  "Level 5: Continuous Evaluation",
 ];
 
 const topics = [
-  {
-    id: 1,
-    title: "Governance & Accountability",
-    preDefinition:
-      "My organization has well-established formal policies and practices that ensure the development process of the AI system is human-centered, prioritize human needs, values, and benefits, as well as effective means to hold people accountable who are involved in the development process.",
-    postDefinition:
-      "My organization has well-established, formal policies and practices to ensure that the deployed AI system is continuously monitored for compliance with human-centered practices, standards or regulations, and that monitoring feedback is used to guide product and process improvement and innovation.",
-  },
-  {
-    id: 2,
-    title: "Human-Centered Design Integration",
-    preDefinition:
-      "My organization has established a culture of human-centered AI and applies its methodology for the development of AI systems. End users and impacted stakeholders are involved in activities during the lifecycle of an AI system to achieve utility, usability, and trustworthiness.",
-    postDefinition:
-      "My organization monitors and assesses the utility, usability, and trustworthiness of deployed AI systems for end users and impacted stakeholders and uses the results to guide product and process improvement and innovation.",
-  },
-  {
-    id: 3,
-    title: "Fairness, Ethics & Diversity",
-    preDefinition:
-      "My organization develops AI systems in a way that ensures end users and affected stakeholders are treated fairly and ethically, accounts for a broad range of human diversity, and proactively identifies and mitigates potential bias and exclusion.",
-    postDefinition:
-      "My organization monitors the use of deployed AI systems to identify issues related to fairness, ethics, and diversity, addresses any issues appropriately, and uses the insights to guide product and process improvements and innovation.",
-  },
-  {
-    id: 4,
-    title: "Security, Privacy & Safety",
-    preDefinition:
-      "My organization develops AI systems in a way that ensures the security, privacy, and safety of the AI model, the data it uses, the AI system’s outputs and decisions, and the supporting infrastructure, in order to mitigate misuse and harmful effects.",
-    postDefinition:
-      "My organization monitors deployed AI systems to ensure the security, privacy, and safety of the AI model, the data it uses, the AI system’s outputs and decisions, and the supporting infrastructure, and uses the findings to guide product and process improvements and innovation.",
-  },
-  {
-    id: 5,
-    title: "Explainability & Transparency",
-    preDefinition:
-      "My organization develops AI systems in a way that provides end users and affected stakeholders with understandable reasons for the system’s outputs and ensures they understand how the model was developed, what data it uses, what decisions it can make, and how its components relate to one another.",
-    postDefinition:
-      "My organization assesses deployed AI systems for explainability and transparency, with the participation of end users and affected stakeholders, to guide product and process improvements and innovation.",
-  },
-  {
-    id: 6,
-    title: "Human Oversight & Control",
-    preDefinition:
-      "My organization develops AI systems with the participation of end users and affected stakeholders, ensuring they can understand system limitations, avoid overreliance, interpret and override outputs, and safely intervene when needed.",
-    postDefinition:
-      "My organization monitors deployed AI systems to evaluate the effectiveness of human oversight and control and uses user feedback to guide product and process improvements and innovation.",
-  },
-  {
-    id: 7,
-    title: "Environmental Impact & Societal Well-Being",
-    preDefinition:
-      "My organization embeds a systematic process for measuring and improving the environmental impact and societal well-being of its AI systems throughout the development lifecycle.",
-    postDefinition:
-      "My organization embeds a systematic process for monitoring the environmental impact and societal well-being of its deployed AI systems and uses the results to guide product and process improvements and innovation.",
-  },
-  {
-    id: 8,
-    title: "Performance, Robustness & Reliability",
-    preDefinition:
-      "My organization designs and develops AI systems to deliver high-quality outcomes that are assessed by end users and affected stakeholders, ensuring performance, robustness, and reliability that fits the intended purpose.",
-    postDefinition:
-      "My organization tracks and logs AI systems, makes performance visible to end users and affected stakeholders, and collects their feedback on output quality to guide improvement.",
-  },
-  {
-    id: 9,
-    title: "Responsibility, Traceability & Contestability",
-    preDefinition:
-      "My organization has well-established practices and technologies to ensure that AI decisions and outcomes can be systematically traced to their sources and attributed to responsible roles.",
-    postDefinition:
-      "My organization tracks model update lineage, data drift, system changes, decision-making process, and operational context so end users and affected stakeholders can challenge AI decisions.",
-  },
-  {
-    id: 10,
-    title: "Lifecycle Planning",
-    preDefinition:
-      "My organization has a well-established formal pre-deployment lifecycle plan, consisting of processes, practices, and metrics, to ensure that AI system quality and value for end users and affected stakeholders are realized.",
-    postDefinition:
-      "My organization has a well-established formal post-deployment lifecycle plan, consisting of processes, practices, and metrics, to ensure that AI system quality and value for end users and affected stakeholders do not degrade.",
-  },
+  "Governance & Accountability",
+  "Human-Centered Design Integration",
+  "Fairness, Ethics & Diversity",
+  "Security, Privacy & Safety",
+  "Explainability & Transparency",
+  "Human Oversight & Control",
+  "Environmental Impact & Societal Well-Being",
+  "Performance, Robustness & Reliability",
+  "Responsibility, Traceability & Contestability",
+  "Lifecycle Planning",
 ];
 
 const levelDescriptions = [
-  "My organization is not aware of these activities or does not perform these activities.",
-  "My organization performs or recognizes relevant activities on an initial or ad-hoc basis.",
-  "Level 1 applies and my organization has proactively defined internal practices for some AI systems.",
-  "Level 2 applies and my organization systematically involves end users and impacted stakeholders for most AI systems.",
-  "Level 3 applies and my organization has defined and approved metrics and applies them with measured evidence.",
-  "Level 4 applies and my organization systematically uses captured results to continuously improve AI systems and organizational processes.",
+  "The organization is not aware of these activities or does not perform them.",
+  "Relevant activities are recognized or performed on an initial or ad-hoc basis.",
+  "Internal practices are defined and applied for some AI systems.",
+  "End users and impacted stakeholders are systematically involved for most AI systems.",
+  "Approved metrics are applied with measured evidence.",
+  "Captured results are systematically used for continuous improvement.",
 ];
+
+const defaultWeights = Array(topics.length).fill(1);
+
+function calculateWeightedScore(levels: number[], weights: number[]) {
+  const validItems = levels
+    .map((level, index) => ({
+      level,
+      weight: weights[index],
+    }))
+    .filter((item) => item.level >= 0);
+
+  if (validItems.length === 0) return 0;
+
+  const weightedSum = validItems.reduce(
+    (sum, item) => sum + item.level * item.weight,
+    0
+  );
+
+  const totalWeight = validItems.reduce((sum, item) => sum + item.weight, 0);
+
+  return weightedSum / totalWeight;
+}
 
 export default function OrganizationPage() {
   const [phase, setPhase] = useState<Phase>("pre");
@@ -116,6 +68,8 @@ export default function OrganizationPage() {
 
   const [submitted, setSubmitted] = useState(false);
 
+  const weights = defaultWeights;
+
   const selectLevel = (topicIndex: number, level: number) => {
     setAnswers((prev) => {
       const updated = [...prev[phase]];
@@ -126,6 +80,8 @@ export default function OrganizationPage() {
         [phase]: updated,
       };
     });
+
+    setSubmitted(false);
   };
 
   const autoComplete = () => {
@@ -133,31 +89,40 @@ export default function OrganizationPage() {
       ...prev,
       [phase]: topics.map(() => Math.floor(Math.random() * 6)),
     }));
+
+    setSubmitted(false);
   };
 
   const submitAssessment = () => {
+    const preScore = calculateWeightedScore(answers.pre, weights);
+    const postScore = calculateWeightedScore(answers.post, weights);
+    const overallScore = (preScore + postScore) / 2;
+
     setSubmitted(true);
 
-  localStorage.setItem(
-  "organizationResults",
-  JSON.stringify({
-    phase,
-    pre: answers.pre,
-    post: answers.post,
-  })
-  );
+    localStorage.setItem(
+      "organizationResults",
+      JSON.stringify({
+        phase,
+        pre: answers.pre,
+        post: answers.post,
+        weights,
+        preScore,
+        postScore,
+        overallScore,
+      })
+    );
   };
 
   const currentAnswers = answers[phase];
 
-  const completedCount = currentAnswers.filter((value) => value >= 0).length;
+  const preScore = calculateWeightedScore(answers.pre, weights);
+  const postScore = calculateWeightedScore(answers.post, weights);
+  const overallScore = (preScore + postScore) / 2;
 
-  const average =
-    completedCount > 0
-      ? currentAnswers
-          .filter((value) => value >= 0)
-          .reduce((sum, value) => sum + value, 0) / completedCount
-      : 0;
+  const currentCompletedCount = currentAnswers.filter((v) => v >= 0).length;
+  const preCompletedCount = answers.pre.filter((v) => v >= 0).length;
+  const postCompletedCount = answers.post.filter((v) => v >= 0).length;
 
   return (
     <main className="min-h-screen bg-slate-100 p-10">
@@ -178,12 +143,154 @@ export default function OrganizationPage() {
           </Link>
         </div>
 
-        <div className="bg-green-50 border border-green-100 rounded-2xl p-6 mb-8">
-          <p className="text-slate-700 leading-relaxed">
-            Select a lifecycle phase, then choose one maturity level from Level
-            0 to Level 5 for each topic.
-          </p>
+        <section className="bg-green-50 border border-green-100 rounded-3xl p-8 mb-10">
+          <h2 className="text-3xl font-bold text-slate-800 mb-6">
+            Guided Instructions for Organization Users
+          </h2>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-4">
+            <div className="bg-white rounded-2xl p-5 border border-green-100">
+              <div className="font-bold text-green-700 mb-2">Step 1</div>
+              <p className="text-slate-700">
+                Assemble a cross-functional evaluation panel, including UX,
+                engineering, compliance, operations, and domain experts.
+              </p>
+            </div>
+
+            <div className="bg-white rounded-2xl p-5 border border-green-100">
+              <div className="font-bold text-green-700 mb-2">Step 2</div>
+              <p className="text-slate-700">
+                Review evidence such as audit logs, red-teaming reports, user
+                feedback, governance records, and monitoring data.
+              </p>
+            </div>
+
+            <div className="bg-white rounded-2xl p-5 border border-green-100">
+              <div className="font-bold text-green-700 mb-2">Step 3</div>
+              <p className="text-slate-700">
+                Select one consensus maturity level from 0 to 5 for each topic
+                and lifecycle phase.
+              </p>
+            </div>
+
+            <div className="bg-white rounded-2xl p-5 border border-green-100">
+              <div className="font-bold text-green-700 mb-2">Step 4</div>
+              <p className="text-slate-700">
+                Apply topic weights based on the organization&apos;s risk
+                profile. 
+              </p>
+            </div>
+
+            <div className="bg-white rounded-2xl p-5 border border-green-100">
+              <div className="font-bold text-green-700 mb-2">Step 5</div>
+              <p className="text-slate-700">
+                Compute pre-deployment, post-deployment, and overall maturity
+                scores.
+              </p>
+            </div>
+          </div>
+        </section>
+
+       <section className="bg-slate-50 border border-slate-200 rounded-3xl p-8 mb-10">
+  <h2 className="text-3xl font-bold text-slate-800 mb-4">
+    Maturity Score Formula
+  </h2>
+
+  <div className="space-y-6 text-slate-700 text-lg leading-relaxed">
+    <p>
+      After the organization selects a consensus maturity level for each topic
+      in both lifecycle phases, the system computes phase-specific maturity
+      scores using a weighted linear additive model. The overall organizational
+      maturity score is then calculated by averaging the pre-deployment and
+      post-deployment scores.
+    </p>
+
+    <div className="bg-white border border-slate-200 rounded-2xl p-6">
+      <h3 className="text-2xl font-bold text-slate-800 mb-4">
+        Mathematical Formulation
+      </h3>
+
+      <div className="bg-slate-100 rounded-xl p-5 font-mono text-slate-900 text-base space-y-3">
+        <div>
+          lᵢ,ₚ = Consensus(lᵢ,ₚ,₁, lᵢ,ₚ,₂, ..., lᵢ,ₚ,ₙ)
         </div>
+
+        <div>
+          Mₚ = Σᵢ₌₁¹⁰(wᵢ × lᵢ,ₚ) / Σᵢ₌₁¹⁰wᵢ
+        </div>
+
+        <div>
+          M_pre = Σᵢ₌₁¹⁰(wᵢ × lᵢ,pre) / Σᵢ₌₁¹⁰wᵢ
+        </div>
+
+        <div>
+          M_post = Σᵢ₌₁¹⁰(wᵢ × lᵢ,post) / Σᵢ₌₁¹⁰wᵢ
+        </div>
+
+        <div>
+          M_overall = (M_pre + M_post) / 2
+        </div>
+      </div>
+
+     
+    </div>
+
+    <div className="bg-green-50 border border-green-200 rounded-2xl p-6">
+      <h3 className="text-2xl font-bold text-slate-800 mb-4">
+        Symbol Definitions
+      </h3>
+
+      <ul className="space-y-3 text-slate-700">
+        <li>
+          <strong>p</strong>: lifecycle phase, where p ∈ {"{pre, post}"}
+        </li>
+
+        <li>
+          <strong>i</strong>: HCAI topic index, where i ∈ {"{1, ..., 10}"}
+        </li>
+
+        <li>
+          <strong>j</strong>: expert index, where j ∈ {"{1, ..., N}"}
+        </li>
+
+        <li>
+          <strong>N</strong>: total number of experts in the organizational
+          evaluation panel
+        </li>
+
+        <li>
+          <strong>lᵢ,ₚ,ⱼ</strong>: maturity level assigned by expert j for
+          topic i in phase p
+        </li>
+
+        <li>
+          <strong>lᵢ,ₚ</strong>: consensus maturity level for topic i in
+          phase p
+        </li>
+
+        <li>
+          <strong>wᵢ</strong>: weight assigned to topic i
+        </li>
+
+        <li>
+          <strong>Mₚ</strong>: maturity score for phase p
+        </li>
+
+        <li>
+          <strong>M_pre</strong>: pre-deployment maturity score
+        </li>
+
+        <li>
+          <strong>M_post</strong>: post-deployment maturity score
+        </li>
+
+        <li>
+          <strong>M_overall</strong>: overall organizational maturity score
+        </li>
+      </ul>
+    </div>
+  </div>
+</section>
 
         <div className="flex gap-4 mb-10">
           <button
@@ -215,66 +322,86 @@ export default function OrganizationPage() {
           </button>
         </div>
 
-        <div className="space-y-8">
-          {topics.map((topic, topicIndex) => {
-            const definition =
-              phase === "pre" ? topic.preDefinition : topic.postDefinition;
+        <div className="bg-white border border-slate-200 rounded-2xl p-5 mb-8 space-y-3">
+  <p className="text-slate-700">
+    Current phase:{" "}
+    <strong>
+      {phase === "pre" ? "Pre-deployment" : "Post-deployment"}
+    </strong>
+    . Completed topics in this phase:{" "}
+    <strong>{currentCompletedCount}/10</strong>. Pre completed:{" "}
+    <strong>{preCompletedCount}/10</strong>. Post completed:{" "}
+    <strong>{postCompletedCount}/10</strong>.
+  </p>
 
-            return (
-              <div
-                key={topic.id}
-                className="bg-slate-50 border border-slate-200 rounded-2xl p-6"
-              >
-                <div className="mb-5">
-                  <span className="text-sm font-semibold text-green-600 uppercase tracking-wide">
-                    Topic {topic.id}
-                  </span>
-
-                  <h2 className="text-2xl font-bold text-slate-800 mt-1">
-                    {topic.title}
-                  </h2>
-
-                  <p className="text-slate-600 mt-3 leading-relaxed">
-                    {definition}
-                  </p>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-                  {[0, 1, 2, 3, 4, 5].map((level) => (
-                    <button
-                      key={level}
-                      onClick={() => selectLevel(topicIndex, level)}
-                      className={`text-left rounded-2xl border p-4 transition-all ${
-                        currentAnswers[topicIndex] === level
-                          ? "bg-green-600 text-white border-green-600 shadow-lg scale-[1.02]"
-                          : "bg-white border-slate-200 hover:bg-green-50"
-                      }`}
-                    >
-                  <div
-  className={`text-2xl font-extrabold mb-3 ${
-    currentAnswers[topicIndex] === level
-      ? "text-white"
-      : "text-black"
-  }`}
->
-  {levelLabels[level]}
+  <div className="bg-blue-50 border border-blue-100 rounded-xl p-4 text-slate-700 text-sm leading-relaxed">
+    <strong>Demo simplification note:</strong> In a full organizational
+    assessment, multiple experts (N-expert panel) would independently assess
+    evidence and produce consensus maturity levels. To support dynamic
+    interaction and real-time visualization, this demo simulates the input of
+    a single expert only. This demo uses equal weights by default.
+  </div>
 </div>
 
-                     <p
-  className={`text-base leading-relaxed font-medium ${
-    currentAnswers[topicIndex] === level
-      ? "text-white"
-      : "text-slate-800"
-  }`}
->
-  {levelDescriptions[level]}
-</p>
-                    </button>
-                  ))}
-                </div>
+        <div className="space-y-8">
+          {topics.map((topic, topicIndex) => (
+            <div
+              key={topic}
+              className="bg-slate-50 border border-slate-200 rounded-2xl p-6"
+            >
+              <div className="mb-5">
+                <span className="text-sm font-semibold text-green-600 uppercase tracking-wide">
+                  Topic {topicIndex + 1}
+                </span>
+
+                <h2 className="text-2xl font-bold text-slate-800 mt-1">
+                  {topic}
+                </h2>
+
+                <p className="text-slate-600 mt-3">
+                  Select the consensus maturity level for this topic in the{" "}
+                  <strong>
+                    {phase === "pre" ? "pre-deployment" : "post-deployment"}
+                  </strong>{" "}
+                  phase.
+                </p>
               </div>
-            );
-          })}
+
+              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+                {[0, 1, 2, 3, 4, 5].map((level) => (
+                  <button
+                    key={level}
+                    onClick={() => selectLevel(topicIndex, level)}
+                    className={`text-left rounded-2xl border p-5 transition-all ${
+                      currentAnswers[topicIndex] === level
+                        ? "bg-green-600 text-white border-green-600 shadow-lg scale-[1.02]"
+                        : "bg-white border-slate-200 hover:bg-green-50"
+                    }`}
+                  >
+                    <div
+                      className={`text-2xl font-extrabold mb-3 ${
+                        currentAnswers[topicIndex] === level
+                          ? "text-white"
+                          : "text-black"
+                      }`}
+                    >
+                      {levelLabels[level]}
+                    </div>
+
+                    <p
+                      className={`text-base leading-relaxed font-medium ${
+                        currentAnswers[topicIndex] === level
+                          ? "text-green-50"
+                          : "text-slate-800"
+                      }`}
+                    >
+                      {levelDescriptions[level]}
+                    </p>
+                  </button>
+                ))}
+              </div>
+            </div>
+          ))}
         </div>
 
         <div className="flex flex-wrap gap-4 mt-12">
@@ -294,46 +421,136 @@ export default function OrganizationPage() {
         </div>
 
         {submitted && (
-          <div className="mt-12 bg-green-50 border border-green-200 rounded-3xl p-8">
-            <h2 className="text-3xl font-bold text-slate-800 mb-4">
-              Maturity Summary
+          <section className="mt-12 bg-green-50 border border-green-200 rounded-3xl p-8">
+            <h2 className="text-3xl font-bold text-slate-800 mb-6">
+              Maturity Score Calculation
             </h2>
 
-            <p className="text-slate-700 mb-4">
-              Phase:{" "}
-              <strong>
-                {phase === "pre" ? "Pre-deployment" : "Post-deployment"}
-              </strong>
-            </p>
-
-            <p className="text-slate-700 mb-4">
-              Completed topics: <strong>{completedCount}/10</strong>
-            </p>
-
-            <p className="text-slate-700 mb-6">
-              Average maturity level: <strong>{average.toFixed(2)}</strong>
-            </p>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              {topics.map((topic, index) => (
-                <div
-                  key={topic.id}
-                  className="bg-white border border-green-100 rounded-xl p-4"
-                >
-                  <div className="font-semibold text-slate-800">
-                    Topic {topic.id}: {topic.title}
-                  </div>
-
-                  <div className="text-green-700 mt-1">
-                    Selected Level:{" "}
-                    {currentAnswers[index] >= 0
-                      ? currentAnswers[index]
-                      : "Not selected"}
-                  </div>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+              <div className="bg-white border border-green-100 rounded-2xl p-6">
+                <div className="text-sm text-slate-500 mb-2">
+                  Pre-deployment Score
                 </div>
-              ))}
+                <div className="text-4xl font-extrabold text-green-700">
+                  {preScore.toFixed(2)}
+                </div>
+              </div>
+
+              <div className="bg-white border border-green-100 rounded-2xl p-6">
+                <div className="text-sm text-slate-500 mb-2">
+                  Post-deployment Score
+                </div>
+                <div className="text-4xl font-extrabold text-green-700">
+                  {postScore.toFixed(2)}
+                </div>
+              </div>
+
+              <div className="bg-white border border-green-100 rounded-2xl p-6">
+                <div className="text-sm text-slate-500 mb-2">
+                  Overall Maturity Score
+                </div>
+                <div className="text-4xl font-extrabold text-green-700">
+                  {overallScore.toFixed(2)}
+                </div>
+              </div>
             </div>
-          </div>
+
+            <div className="bg-white border border-green-100 rounded-2xl p-6 mb-8">
+              <h3 className="text-2xl font-bold text-slate-800 mb-4">
+                Calculation Explanation
+              </h3>
+
+              <p className="text-slate-700 leading-relaxed">
+                The current calculation uses equal weights for all 10 topics.
+                The pre-deployment maturity score is the weighted average of all
+                selected pre-deployment levels. The post-deployment maturity
+                score is calculated in the same way. The overall organizational
+                maturity score is the arithmetic mean of the pre-deployment and
+                post-deployment scores.
+              </p>
+            </div>
+
+            <div className="overflow-x-auto">
+              <table className="w-full border-collapse text-sm bg-white rounded-2xl overflow-hidden">
+                <thead>
+                  <tr className="bg-green-100">
+                    <th className="p-3 text-left text-black font-bold">
+                      Topic
+                    </th>
+                    <th className="p-3 text-center text-black font-bold">
+                      Weight
+                    </th>
+                    <th className="p-3 text-center text-black font-bold">
+                      Pre Level
+                    </th>
+                    <th className="p-3 text-center text-black font-bold">
+                      Post Level
+                    </th>
+                    <th className="p-3 text-center text-black font-bold">
+                      Weighted Pre
+                    </th>
+                    <th className="p-3 text-center text-black font-bold">
+                      Weighted Post
+                    </th>
+                  </tr>
+                </thead>
+
+                <tbody>
+                  {topics.map((topic, index) => {
+                    const preLevel = answers.pre[index];
+                    const postLevel = answers.post[index];
+                    const weight = weights[index];
+
+                    return (
+                      <tr key={topic} className="border-b border-green-100">
+                        <td className="p-3 font-medium text-slate-800">
+                          {topic}
+                        </td>
+
+                        <td className="p-3 text-center">{weight}</td>
+
+                        <td className="p-3 text-center">
+                          {preLevel >= 0 ? preLevel : "Not selected"}
+                        </td>
+
+                        <td className="p-3 text-center">
+                          {postLevel >= 0 ? postLevel : "Not selected"}
+                        </td>
+
+                        <td className="p-3 text-center">
+                          {preLevel >= 0
+                            ? (preLevel * weight).toFixed(2)
+                            : "-"}
+                        </td>
+
+                        <td className="p-3 text-center">
+                          {postLevel >= 0
+                            ? (postLevel * weight).toFixed(2)
+                            : "-"}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+
+            <div className="mt-8 flex flex-wrap gap-4">
+              <Link
+                href="/results"
+                className="bg-purple-600 hover:bg-purple-700 text-white px-6 py-3 rounded-xl transition-all"
+              >
+                Diagnose the Impact Gap
+              </Link>
+
+              <Link
+                href="/"
+                className="bg-slate-700 hover:bg-slate-800 text-white px-6 py-3 rounded-xl transition-all"
+              >
+                Back Home
+              </Link>
+            </div>
+          </section>
         )}
       </div>
     </main>
