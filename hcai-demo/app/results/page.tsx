@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 
 import {
@@ -12,63 +12,234 @@ import {
   ResponsiveContainer,
   Tooltip,
   Legend,
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
 } from "recharts";
 
-const topicNames = [
+type FactorScore = {
+  factor: string;
+  score: number;
+};
+
+type EndUserParticipant = {
+  id: string;
+  type: string;
+  answers: number[];
+  factors: FactorScore[];
+};
+
+type Expert = {
+  id: string;
+  role: string;
+  pre: number[];
+  post: number[];
+};
+
+type OrganizationResults = {
+  pre: number[];
+  post: number[];
+  weights?: number[];
+  experts?: Expert[];
+  expertCount?: number;
+  mode?: string;
+  preScore?: number;
+  postScore?: number;
+  overallScore?: number;
+};
+
+const maturityTopics = [
   "Governance",
   "HCD Integration",
   "Fairness, Ethics & Diversity",
-  "Security",
+  "Security, Privacy & Safety",
   "Transparency & Explainability",
   "Human Oversight & Control",
   "Societal Impact",
-  "Performance",
-  "Traceability",
-  "Lifecycle",
+  "Performance & Reliability",
+  "Responsibility & Traceability",
+  "Lifecycle Planning",
 ];
 
-function normalizeUser(score: number) {
-  return (score - 1) / 6;
-}
+const hucasFactors = [
+  "Trust",
+  "Transparency",
+  "Explainability",
+  "Human Control",
+  "Adaptability",
+  "Formal Fairness",
+  "Substantive Fairness",
+];
+
+const alignmentMappings = [
+  {
+    topicIndex: 4,
+    topic: "Transparency & Explainability",
+    factor: "Transparency",
+  },
+  {
+    topicIndex: 4,
+    topic: "Transparency & Explainability",
+    factor: "Explainability",
+  },
+  {
+    topicIndex: 5,
+    topic: "Human Oversight & Control",
+    factor: "Human Control",
+  },
+  {
+    topicIndex: 2,
+    topic: "Fairness, Ethics & Diversity",
+    factor: "Formal Fairness",
+  },
+  {
+    topicIndex: 2,
+    topic: "Fairness, Ethics & Diversity",
+    factor: "Substantive Fairness",
+  },
+  {
+    topicIndex: 0,
+    topic: "Governance",
+    factor: "Trust",
+  },
+  {
+    topicIndex: 1,
+    topic: "HCD Integration",
+    factor: "Adaptability",
+  },
+];
 
 function normalizeOrg(level: number) {
-  return level / 5;
+  return Math.max(0, Math.min(1, level / 5));
 }
 
-function isCriticalConflict(orgLevel: number, userScore: number) {
-  const org = normalizeOrg(orgLevel);
-  const user = normalizeUser(userScore);
+function normalizeUser(score: number) {
+  return Math.max(0, Math.min(1, (score - 1) / 6));
+}
 
-  return (
-    (org >= 0.67 && user <= 0.33) ||
-    (org <= 0.33 && user >= 0.67)
+function mean(values: number[]) {
+  if (values.length === 0) return 0;
+  return values.reduce((sum, value) => sum + value, 0) / values.length;
+}
+
+function variance(values: number[]) {
+  if (values.length === 0) return 0;
+  const avg = mean(values);
+  return mean(values.map((value) => Math.pow(value - avg, 2)));
+}
+
+function getFactorScore(results: FactorScore[], factor: string) {
+  return results.find((item) => item.factor === factor)?.score ?? 0;
+}
+
+function calculateWeightedScore(levels: number[], weights: number[]) {
+  const valid = levels
+    .map((level, index) => ({
+      level,
+      weight: weights[index] ?? 1,
+    }))
+    .filter((item) => item.level >= 0);
+
+  if (valid.length === 0) return 0;
+
+  const weightedSum = valid.reduce(
+    (sum, item) => sum + item.level * item.weight,
+    0
   );
+
+  const totalWeight = valid.reduce((sum, item) => sum + item.weight, 0);
+
+  return weightedSum / totalWeight;
 }
 
-function computeGap(orgLevel: number, userScore: number) {
-  const org = normalizeOrg(orgLevel);
-  const user = normalizeUser(userScore);
+function getDriftLabel(delta: number) {
+  if (delta <= -1.5) return "Severe decline";
+  if (delta < -0.5) return "Moderate decline";
+  if (delta <= 0.5) return "Stable";
+  if (delta <= 1.5) return "Moderate improvement";
+  return "Strong improvement";
+}
 
-  if (isCriticalConflict(orgLevel, userScore)) {
-    return 1.0;
+function getDriftStyle(delta: number) {
+  if (delta <= -1.5) return "bg-red-500 text-white";
+  if (delta < -0.5) return "bg-orange-300 text-slate-900";
+  if (delta <= 0.5) return "bg-slate-200 text-slate-900";
+  if (delta <= 1.5) return "bg-green-300 text-slate-900";
+  return "bg-green-600 text-white";
+}
+
+function classifyAlignment(orgPost: number, userScore: number) {
+  const org = normalizeOrg(orgPost);
+  const user = normalizeUser(userScore);
+  const gap = Math.abs(org - user);
+
+  if (org >= 0.67 && user <= 0.33) {
+    return {
+      label: "Critical mismatch",
+      detail: "High post-deployment maturity but low user perception",
+      gap,
+      style: "bg-red-500 text-white",
+    };
   }
 
-  return Math.abs(org - user);
+  if (org <= 0.33 && user >= 0.67) {
+    return {
+      label: "Under-recognized experience",
+      detail: "Low post-deployment maturity but high user perception",
+      gap,
+      style: "bg-purple-500 text-white",
+    };
+  }
+
+  if (gap < 0.25) {
+    return {
+      label: "Aligned",
+      detail: "Organizational maturity and user perception are similar",
+      gap,
+      style: "bg-green-300 text-slate-900",
+    };
+  }
+
+  if (org > user) {
+    return {
+      label: "Organizational overestimation",
+      detail: "Internal maturity is higher than user perception",
+      gap,
+      style: "bg-yellow-300 text-slate-900",
+    };
+  }
+
+  return {
+    label: "User-perceived strength",
+    detail: "User perception is higher than internal maturity",
+    gap,
+    style: "bg-blue-300 text-slate-900",
+  };
 }
 
-function getGapStyle(value: number) {
-  if (value >= 0.67) return "bg-red-500 text-white";
-  if (value >= 0.34) return "bg-yellow-300 text-slate-900";
-  return "bg-green-300 text-slate-900";
+function getParticipantFactorValues(
+  participants: EndUserParticipant[],
+  factor: string
+) {
+  return participants
+    .map((participant) => {
+      const found = participant.factors.find((item) => item.factor === factor);
+      return found?.score ?? 0;
+    })
+    .filter((value) => value > 0);
 }
 
-function getGapLabel(value: number) {
-  if (value >= 0.67) return "High";
-  if (value >= 0.34) return "Medium";
-  return "Low";
+function getExpertTopicValues(experts: Expert[], topicIndex: number) {
+  return experts.map((expert) => {
+    const pre = expert.pre[topicIndex] ?? 0;
+    const post = expert.post[topicIndex] ?? 0;
+    return (pre + post) / 2;
+  });
 }
 
-function WrappedPolarTick(props: any) {
+function WrappedTick(props: any) {
   const { x, y, payload, textAnchor } = props;
   const label = payload.value;
 
@@ -81,10 +252,10 @@ function WrappedPolarTick(props: any) {
       ? ["Human", "Control"]
       : label === "Transparency & Explainability"
       ? ["Transparency &", "Explainability"]
-      : label === "Human Oversight & Control"
-      ? ["Human Oversight", "& Control"]
       : label === "Fairness, Ethics & Diversity"
       ? ["Fairness, Ethics", "& Diversity"]
+      : label === "Human Oversight & Control"
+      ? ["Human Oversight", "& Control"]
       : label.split(" ");
 
   return (
@@ -106,213 +277,222 @@ function WrappedPolarTick(props: any) {
 }
 
 export default function ResultsPage() {
-  const [hucasResults, setHucasResults] = useState<any[]>([]);
-  const [maturityResults, setMaturityResults] = useState<any[]>([]);
-  const [gapInsights, setGapInsights] = useState<any[]>([]);
-  const [criticalConflicts, setCriticalConflicts] = useState<any[]>([]);
+  const [hucasResults, setHucasResults] = useState<FactorScore[]>([]);
+  const [hucasParticipants, setHucasParticipants] = useState<
+    EndUserParticipant[]
+  >([]);
+  const [organizationResults, setOrganizationResults] =
+    useState<OrganizationResults | null>(null);
+  const [organizationExperts, setOrganizationExperts] = useState<Expert[]>([]);
 
   useEffect(() => {
-    const savedHucas = localStorage.getItem("hucasResults");
-    const savedOrg = localStorage.getItem("organizationResults");
+    const savedHucasResults = localStorage.getItem("hucasResults");
+    const savedHucasParticipants = localStorage.getItem("hucasParticipants");
+    const savedOrganizationResults = localStorage.getItem("organizationResults");
+    const savedOrganizationExperts = localStorage.getItem("organizationExperts");
 
-    if (!savedHucas || !savedOrg) return;
-
-    const parsedHucas = JSON.parse(savedHucas);
-    const parsedOrg = JSON.parse(savedOrg);
-
-    setHucasResults(parsedHucas);
-
-    const maturityData = topicNames.map((topic, index) => ({
-      topic,
-      pre: parsedOrg.pre[index] ?? 0,
-      post: parsedOrg.post[index] ?? 0,
-    }));
-
-    setMaturityResults(maturityData);
-
-    const getFactor = (factor: string) =>
-      parsedHucas.find((item: any) => item.factor === factor)?.score ?? 0;
-
-    const getOrgAvg = (index: number) =>
-      (maturityData[index].pre + maturityData[index].post) / 2;
-
-    const insights: { title: string; detail: string }[] = [];
-    const conflicts: {
-      topic: string;
-      factor: string;
-      orgLevel: number;
-      userScore: number;
-      direction: string;
-    }[] = [];
-
-    maturityData.forEach((topicRow) => {
-      const orgLevel = (topicRow.pre + topicRow.post) / 2;
-
-      parsedHucas.forEach((factorRow: any) => {
-        const userScore = factorRow.score;
-
-        if (isCriticalConflict(orgLevel, userScore)) {
-          const direction =
-            normalizeOrg(orgLevel) >= 0.67
-              ? "High organizational maturity but low end-user perception"
-              : "Low organizational maturity but high end-user perception";
-
-          conflicts.push({
-            topic: topicRow.topic,
-            factor: factorRow.factor,
-            orgLevel,
-            userScore,
-            direction,
-          });
-        }
-      });
-    });
-
-    setCriticalConflicts(conflicts);
-
-    if (conflicts.length > 0) {
-      const topConflicts = conflicts
-        .slice(0, 5)
-        .map((item) => `${item.topic} vs. ${item.factor} (${item.direction})`)
-        .join("; ");
-
-      insights.push({
-        title: "Critical Perspective Conflict",
-        detail: `The assessment detected opposite evaluations between organizational maturity and end-user perception. These conflicts require high organizational attention: ${topConflicts}.`,
-      });
+    if (savedHucasResults) {
+      setHucasResults(JSON.parse(savedHucasResults));
     }
 
-    const explainabilityScore = getFactor("Explainability");
-    const humanControlScore = getFactor("Human Control");
-    const formalFairnessScore = getFactor("Formal Fairness");
-    const substantiveFairnessScore = getFactor("Substantive Fairness");
-    const trustScore = getFactor("Trust");
-    const transparencyScore = getFactor("Transparency");
-
-    const fairnessOrg = getOrgAvg(2);
-    const explainabilityOrg = getOrgAvg(4);
-    const humanControlOrg = getOrgAvg(5);
-    const governanceOrg = getOrgAvg(0);
-
-    const translationGapTexts: string[] = [];
-
-    if (humanControlOrg <= 2.5 && humanControlScore >= 5) {
-      translationGapTexts.push(
-        "The organization reports relatively low Human Oversight & Control maturity, but end users report high perceived Human Control."
-      );
+    if (savedHucasParticipants) {
+      setHucasParticipants(JSON.parse(savedHucasParticipants));
     }
 
-    if (
-      fairnessOrg >= 4 &&
-      (formalFairnessScore <= 3 || substantiveFairnessScore <= 3)
-    ) {
-      translationGapTexts.push(
-        "The organization reports relatively high Fairness, Ethics & Diversity maturity, but end users report low Formal Fairness and/or low Substantive Fairness."
-      );
+    if (savedOrganizationResults) {
+      setOrganizationResults(JSON.parse(savedOrganizationResults));
     }
 
-    if (explainabilityOrg >= 4 && explainabilityScore <= 3) {
-      translationGapTexts.push(
-        "The organization reports relatively high Transparency & Explainability maturity, but end users report low perceived Explainability."
-      );
+    if (savedOrganizationExperts) {
+      setOrganizationExperts(JSON.parse(savedOrganizationExperts));
     }
-
-    if (governanceOrg >= 4 && trustScore <= 3) {
-      translationGapTexts.push(
-        "The organization reports relatively high Governance & Accountability maturity, but end users report low Trust."
-      );
-    }
-
-    if (translationGapTexts.length > 0) {
-      insights.push({
-        title: "Design Intent vs. User Perception Gap",
-        detail: translationGapTexts.join(" "),
-      });
-    } else {
-      insights.push({
-        title: "Capability-Experience Alignment",
-        detail:
-          "No strong design-intent versus user-perception gap was detected under the current thresholds. Organizational maturity and end-user perception appear broadly aligned.",
-      });
-    }
-
-    const lifecycleDrops = maturityData.filter((item) => item.post < item.pre);
-
-    if (lifecycleDrops.length > 0) {
-      const droppedTopics = lifecycleDrops
-        .map((item) => `${item.topic} (${item.pre} -> ${item.post})`)
-        .join(", ");
-
-      insights.push({
-        title: "Lifecycle Drift",
-        detail: `Post-deployment maturity is lower than pre-deployment maturity in: ${droppedTopics}. This suggests possible degradation after deployment.`,
-      });
-    }
-
-    const lowAreas = maturityData.filter(
-      (item) => (item.pre + item.post) / 2 <= 1.5
-    );
-
-    if (lowAreas.length > 0) {
-      const weakTopics = lowAreas.map((item) => item.topic).join(", ");
-
-      insights.push({
-        title: "Consistent Weakness",
-        detail: `The following organizational capability areas remain relatively weak across lifecycle phases: ${weakTopics}.`,
-      });
-    }
-
-    if (trustScore >= 5.5 && explainabilityOrg <= 1.5) {
-      insights.push({
-        title: "Potential Over-Reliance Risk",
-        detail:
-          "End users report relatively high Trust despite limited organizational Transparency & Explainability maturity. This may indicate over-reliance or insufficient awareness of system limitations.",
-      });
-    }
-
-    if (transparencyScore <= 3 && explainabilityOrg >= 3.5) {
-      insights.push({
-        title: "Transparency Translation Gap",
-        detail:
-          "The organization reports moderate to high Transparency & Explainability maturity, but end users report low Transparency. User-facing communication may not be sufficiently clear or actionable.",
-      });
-    }
-
-    setGapInsights(insights);
   }, []);
 
-  const strongestMaturity = [...maturityResults].sort(
-    (a, b) => (b.pre + b.post) / 2 - (a.pre + a.post) / 2
+  const weights = organizationResults?.weights ?? Array(10).fill(1);
+  const orgPre = organizationResults?.pre ?? [];
+  const orgPost = organizationResults?.post ?? [];
+
+  const maturityRadarData = useMemo(() => {
+    return maturityTopics.map((topic, index) => ({
+      topic,
+      pre: orgPre[index] ?? 0,
+      post: orgPost[index] ?? 0,
+    }));
+  }, [orgPre, orgPost]);
+
+  const driftData = useMemo(() => {
+    return maturityTopics.map((topic, index) => {
+      const pre = orgPre[index] ?? 0;
+      const post = orgPost[index] ?? 0;
+      const delta = post - pre;
+
+      return {
+        topic,
+        pre,
+        post,
+        delta,
+        label: getDriftLabel(delta),
+      };
+    });
+  }, [orgPre, orgPost]);
+
+  const alignmentData = useMemo(() => {
+    return alignmentMappings.map((mapping) => {
+      const orgPostValue = orgPost[mapping.topicIndex] ?? 0;
+      const userValue = getFactorScore(hucasResults, mapping.factor);
+      const classification = classifyAlignment(orgPostValue, userValue);
+
+      return {
+        ...mapping,
+        orgPost: orgPostValue,
+        userScore: userValue,
+        ...classification,
+      };
+    });
+  }, [orgPost, hucasResults]);
+
+  const userVarianceData = useMemo(() => {
+    return hucasFactors.map((factor) => {
+      const values = getParticipantFactorValues(hucasParticipants, factor);
+
+      return {
+        factor,
+        variance: Number(variance(values).toFixed(2)),
+        mean: Number(mean(values).toFixed(2)),
+      };
+    });
+  }, [hucasParticipants]);
+
+  const expertDisagreementData = useMemo(() => {
+    return maturityTopics.map((topic, index) => {
+      const values = getExpertTopicValues(organizationExperts, index);
+
+      return {
+        topic,
+        variance: Number(variance(values).toFixed(2)),
+      };
+    });
+  }, [organizationExperts]);
+
+  const preScore =
+    organizationResults?.preScore ?? calculateWeightedScore(orgPre, weights);
+
+  const postScore =
+    organizationResults?.postScore ?? calculateWeightedScore(orgPost, weights);
+
+  const overallScore =
+    organizationResults?.overallScore ?? (preScore + postScore) / 2;
+
+  const averageUserScore =
+    hucasResults.length > 0
+      ? mean(hucasResults.map((item) => item.score))
+      : 0;
+
+  const severeDrifts = driftData.filter((item) => item.delta <= -1);
+
+  const strongestDriftDecline = [...driftData].sort(
+    (a, b) => a.delta - b.delta
   )[0];
 
-  const weakestMaturity = [...maturityResults].sort(
-    (a, b) => (a.pre + a.post) / 2 - (b.pre + b.post) / 2
+  const biggestAlignmentGap = [...alignmentData].sort(
+    (a, b) => b.gap - a.gap
   )[0];
 
-  const strongestUserFactor = [...hucasResults].sort(
-    (a, b) => b.score - a.score
+  const highestUserVariance = [...userVarianceData].sort(
+    (a, b) => b.variance - a.variance
   )[0];
 
-  const weakestUserFactor = [...hucasResults].sort(
-    (a, b) => a.score - b.score
+  const highestExpertDisagreement = [...expertDisagreementData].sort(
+    (a, b) => b.variance - a.variance
   )[0];
 
-  if (hucasResults.length === 0 || maturityResults.length === 0) {
+  const diagnosisNarratives = useMemo(() => {
+    const narratives: string[] = [];
+
+    if (severeDrifts.length > 0) {
+      narratives.push(
+        `Internal lifecycle drift was detected in ${severeDrifts
+          .map((item) => item.topic)
+          .join(
+            ", "
+          )}. This suggests that some design-time HCAI intentions may not have translated into post-deployment operational practices.`
+      );
+    } else {
+      narratives.push(
+        "No severe negative lifecycle drift was detected. The organization appears to maintain relatively stable HCAI maturity from pre-deployment to post-deployment."
+      );
+    }
+
+    alignmentData.forEach((item) => {
+      if (item.label === "Critical mismatch") {
+        narratives.push(
+          `A critical mismatch appears between post-deployment ${item.topic} maturity and end-user ${item.factor}. The organization reports relatively high operational maturity, but users report low perception. This may indicate that internal governance capability is not experientially visible to users.`
+        );
+      }
+
+      if (item.label === "Organizational overestimation") {
+        narratives.push(
+          `The organization may be overestimating the user-facing impact of ${item.topic}. Although post-deployment maturity is stronger than the corresponding HuCAS factor ${item.factor}, users do not experience this capability at the same level.`
+        );
+      }
+
+      if (
+        item.topic === "Fairness, Ethics & Diversity" &&
+        item.userScore <= 3.5 &&
+        item.orgPost >= 3.5
+      ) {
+        narratives.push(
+          "The fairness-related gap suggests that formal fairness mechanisms may exist internally but may not translate into perceived fairness. Users may still experience unfairness if explanations, adaptability, or contextual sensitivity are insufficient."
+        );
+      }
+
+      if (
+        item.topic === "Transparency & Explainability" &&
+        item.userScore <= 3.5 &&
+        item.orgPost >= 3.5
+      ) {
+        narratives.push(
+          "The transparency/explainability gap suggests that technical documentation or internal explainability practices may not be communicated in a way that users can understand and use during real interaction."
+        );
+      }
+    });
+
+    if (highestUserVariance && highestUserVariance.variance >= 2) {
+      narratives.push(
+        `High user variance was detected in ${highestUserVariance.factor}. This suggests that end users may not share a consistent experience of this HCAI factor, indicating possible user-group polarization or uneven system performance across contexts.`
+      );
+    }
+
+    if (highestExpertDisagreement && highestExpertDisagreement.variance >= 1.5) {
+      narratives.push(
+        `High expert disagreement was detected in ${highestExpertDisagreement.topic}. This may indicate that organizational stakeholders do not share a common view of maturity in this topic, and a facilitated consensus discussion may be needed.`
+      );
+    }
+
+    return Array.from(new Set(narratives));
+  }, [
+    severeDrifts,
+    alignmentData,
+    highestUserVariance,
+    highestExpertDisagreement,
+  ]);
+
+  if (!organizationResults || hucasResults.length === 0) {
     return (
       <main className="min-h-screen bg-slate-100 flex items-center justify-center p-10">
         <div className="bg-white rounded-3xl shadow-2xl p-10 max-w-2xl text-center">
           <h1 className="text-4xl font-bold text-slate-800 mb-6">
-            Results Dashboard
+            Integrated Results Dashboard
           </h1>
 
           <p className="text-slate-600 leading-relaxed mb-8">
-            Please complete both the End User Assessment and the Organization
-            Assessment before generating integrated diagnostic results.
+            Please submit both Organization User Results and End User Results
+            before diagnosing the impact gap.
           </p>
 
           <Link
             href="/"
-            className="bg-blue-600 hover:bg-blue-700 text-white px-8 py-4 rounded-2xl inline-block"
+            className="bg-slate-800 hover:bg-slate-900 text-white px-8 py-4 rounded-2xl inline-block"
           >
             Back Home
           </Link>
@@ -327,12 +507,12 @@ export default function ResultsPage() {
         <div className="flex justify-between items-center mb-10">
           <div>
             <h1 className="text-4xl font-bold text-slate-800">
-              Integrated Results Dashboard
+              Integrated HCAI Results Dashboard
             </h1>
 
             <p className="text-slate-500 mt-2">
-              Real-time integration of HuCAS and organizational maturity
-              assessment
+              Three-layer diagnostic logic: lifecycle drift, external alignment,
+              and structural diagnosis
             </p>
           </div>
 
@@ -341,281 +521,401 @@ export default function ResultsPage() {
           </Link>
         </div>
 
-        <div className="grid grid-cols-1 xl:grid-cols-2 gap-8">
-          <section className="bg-green-50 border border-green-100 rounded-3xl p-8">
-            <h2 className="text-2xl font-bold text-slate-800 mb-4">
-              Organization Assessment: Pre vs. Post Maturity
-            </h2>
-
-            <div className="h-[520px]">
-              <ResponsiveContainer width="100%" height="100%">
-                <RadarChart
-                  data={maturityResults}
-                  margin={{ top: 45, right: 70, bottom: 45, left: 70 }}
-                >
-                  <PolarGrid />
-                  <PolarAngleAxis dataKey="topic" tick={<WrappedPolarTick />} />
-                  <PolarRadiusAxis domain={[0, 5]} />
-
-                  <Tooltip
-                    contentStyle={{
-                      color: "#000000",
-                      backgroundColor: "#ffffff",
-                      border: "1px solid #cbd5e1",
-                    }}
-                    labelStyle={{
-                      color: "#000000",
-                      fontWeight: "bold",
-                    }}
-                    itemStyle={{ color: "#000000" }}
-                  />
-
-                  <Legend />
-
-                  <Radar
-                    name="Pre-deployment"
-                    dataKey="pre"
-                    stroke="#2563eb"
-                    fill="#2563eb"
-                    fillOpacity={0.25}
-                  />
-
-                  <Radar
-                    name="Post-deployment"
-                    dataKey="post"
-                    stroke="#dc2626"
-                    fill="#dc2626"
-                    fillOpacity={0.25}
-                  />
-                </RadarChart>
-              </ResponsiveContainer>
-            </div>
-          </section>
-
-          <section className="bg-blue-50 border border-blue-100 rounded-3xl p-8">
-            <h2 className="text-2xl font-bold text-slate-800 mb-4">
-              End-User Assessment: HuCAS
-            </h2>
-
-            <div className="h-[520px]">
-              <ResponsiveContainer width="100%" height="100%">
-                <RadarChart
-                  data={hucasResults}
-                  margin={{ top: 55, right: 90, bottom: 55, left: 90 }}
-                >
-                  <PolarGrid />
-                  <PolarAngleAxis dataKey="factor" tick={<WrappedPolarTick />} />
-                  <PolarRadiusAxis domain={[1, 7]} />
-                  <Radar
-                    name="HuCAS"
-                    dataKey="score"
-                    stroke="#2563eb"
-                    fill="#2563eb"
-                    fillOpacity={0.45}
-                  />
-                </RadarChart>
-              </ResponsiveContainer>
-            </div>
-          </section>
-        </div>
-
-        <section className="mt-10 bg-slate-50 border border-slate-200 rounded-3xl p-8">
+        <section className="bg-indigo-50 border border-indigo-200 rounded-3xl p-8 mb-10">
           <h2 className="text-3xl font-bold text-slate-800 mb-6">
-            Dynamic Gap Diagnosis
+            1. Executive Summary
           </h2>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {gapInsights.map((insight, index) => (
-              <div
-                key={index}
-                className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm"
-              >
-                <h3 className="text-xl font-bold text-slate-800 mb-3">
-                  {insight.title}
-                </h3>
-
-                <p className="text-slate-600 leading-relaxed">
-                  {insight.detail}
-                </p>
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+            <div className="bg-white rounded-2xl border border-indigo-100 p-6">
+              <div className="text-sm text-slate-500 mb-2">
+                Organization Maturity
               </div>
-            ))}
+              <div className="text-4xl font-extrabold text-indigo-700">
+                {overallScore.toFixed(2)}
+              </div>
+            </div>
+
+            <div className="bg-white rounded-2xl border border-indigo-100 p-6">
+              <div className="text-sm text-slate-500 mb-2">
+                Post-deployment Score
+              </div>
+              <div className="text-4xl font-extrabold text-indigo-700">
+                {postScore.toFixed(2)}
+              </div>
+            </div>
+
+            <div className="bg-white rounded-2xl border border-indigo-100 p-6">
+              <div className="text-sm text-slate-500 mb-2">
+                Avg. HuCAS Score
+              </div>
+              <div className="text-4xl font-extrabold text-blue-700">
+                {averageUserScore.toFixed(2)}
+              </div>
+            </div>
+
+            <div className="bg-white rounded-2xl border border-indigo-100 p-6">
+              <div className="text-sm text-slate-500 mb-2">Participants</div>
+              <div className="text-4xl font-extrabold text-slate-800">
+                {hucasParticipants.length || 1} /{" "}
+                {organizationExperts.length ||
+                  organizationResults.expertCount ||
+                  1}
+              </div>
+              <div className="text-xs text-slate-500 mt-2">
+                End users / experts
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-white rounded-2xl border border-indigo-100 p-6 text-slate-700 leading-relaxed">
+            <p>
+              The system first checks whether the organization maintained its
+              HCAI maturity from pre-deployment to post-deployment. It then
+              compares post-deployment maturity with end-user HuCAS perceptions.
+              Finally, it generates structural diagnostic narratives explaining
+              where internal capability may fail to become user-facing
+              experiential value.
+            </p>
           </div>
         </section>
 
-        <section className="mt-10 bg-white border border-slate-200 rounded-3xl p-8">
-          <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-4 mb-6">
-            <div>
-              <h2 className="text-3xl font-bold text-slate-800">
-                Gap Heatmap
-              </h2>
+        <section className="bg-green-50 border border-green-200 rounded-3xl p-8 mb-10">
+          <h2 className="text-3xl font-bold text-slate-800 mb-6">
+            2. Internal Lifecycle Drift Analysis
+          </h2>
 
-              <p className="text-slate-500 mt-2">
-                Conflict-aware 10 × 7 impact gap matrix using normalized
-                organization scores and end-user scores.
+          <div className="grid grid-cols-1 xl:grid-cols-2 gap-8 mb-8">
+            <div className="bg-white rounded-2xl border border-green-100 p-6">
+              <h3 className="text-2xl font-bold text-slate-800 mb-4">
+                Pre vs. Post Maturity Radar
+              </h3>
+
+              <div className="h-[460px]">
+                <ResponsiveContainer width="100%" height="100%">
+                  <RadarChart
+                    data={maturityRadarData}
+                    margin={{ top: 40, right: 70, bottom: 40, left: 70 }}
+                  >
+                    <PolarGrid />
+                    <PolarAngleAxis dataKey="topic" tick={<WrappedTick />} />
+                    <PolarRadiusAxis domain={[0, 5]} />
+                    <Tooltip />
+                    <Legend />
+                    <Radar
+                      name="Pre-deployment"
+                      dataKey="pre"
+                      stroke="#2563eb"
+                      fill="#2563eb"
+                      fillOpacity={0.25}
+                    />
+                    <Radar
+                      name="Post-deployment"
+                      dataKey="post"
+                      stroke="#dc2626"
+                      fill="#dc2626"
+                      fillOpacity={0.25}
+                    />
+                  </RadarChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+
+            <div className="bg-white rounded-2xl border border-green-100 p-6">
+              <h3 className="text-2xl font-bold text-slate-800 mb-4">
+                Drift Severity
+              </h3>
+
+              <div className="overflow-x-auto pb-2">
+                <table className="min-w-[760px] border-collapse text-sm">
+                  <thead>
+                    <tr className="bg-green-100">
+                      <th className="p-3 text-left text-black font-bold">
+                        Topic
+                      </th>
+                      <th className="p-3 text-center text-black font-bold">
+                        Pre
+                      </th>
+                      <th className="p-3 text-center text-black font-bold">
+                        Post
+                      </th>
+                      <th className="p-3 text-center text-black font-bold">
+                        Drift
+                      </th>
+                      <th className="p-3 text-center text-black font-bold">
+                        Interpretation
+                      </th>
+                    </tr>
+                  </thead>
+
+                  <tbody>
+                    {driftData.map((item) => (
+                      <tr key={item.topic} className="border-b border-green-100">
+                        <td className="p-3 font-semibold text-slate-800">
+                          {item.topic}
+                        </td>
+                        <td className="p-3 text-center text-black font-semibold">
+                          {item.pre.toFixed(1)}
+                        </td>
+                        <td className="p-3 text-center text-black font-semibold">
+                          {item.post.toFixed(1)}
+                        </td>
+                        <td className="p-3 text-center">
+                          <span
+                            className={`px-3 py-2 rounded-xl font-bold ${getDriftStyle(
+                              item.delta
+                            )}`}
+                          >
+                            {item.delta.toFixed(1)}
+                          </span>
+                        </td>
+                        <td className="p-3 text-center text-black font-semibold">
+                          {item.label}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              <p className="text-slate-600 mt-5 leading-relaxed">
+                Strong negative drift indicates that design-time intent may have
+                weakened during deployment or operation. The largest decline is{" "}
+                <strong>{strongestDriftDecline?.topic}</strong>.
               </p>
             </div>
-
-            <div className="flex gap-3 text-sm">
-              <span className="px-3 py-1 rounded-full bg-green-300">
-                Low Gap
-              </span>
-
-              <span className="px-3 py-1 rounded-full bg-yellow-300">
-                Medium Gap
-              </span>
-
-              <span className="px-3 py-1 rounded-full bg-red-500 text-white">
-                High
-              </span>
-            </div>
           </div>
+        </section>
 
-          <div className="bg-slate-50 border border-slate-200 rounded-2xl p-5 mb-6 text-slate-700 leading-relaxed">
-            <p>
-              <strong>Low Gap:</strong> Organizational maturity and end-user
-              perception are relatively aligned after normalization.
-            </p>
-            <p className="mt-2">
-              <strong>Medium Gap:</strong> The two perspectives show a moderate
-              difference and may require further interpretation.
-            </p>
-            <p className="mt-2">
-              <strong>High Gap:</strong> The two perspectives are strongly
-              misaligned. This includes critical conflicts where one side is
-              high while the other side is low.
-            </p>
-          </div>
+        <section className="bg-blue-50 border border-blue-200 rounded-3xl p-8 mb-10">
+          <h2 className="text-3xl font-bold text-slate-800 mb-6">
+            3. External Alignment Analysis
+          </h2>
 
-          <div className="overflow-x-auto">
-            <table className="w-full border-collapse text-sm">
+          <p className="text-slate-700 mb-6 leading-relaxed">
+            This layer compares post-deployment organizational maturity with
+            end-user HuCAS perceptions. It avoids directly comparing
+            pre-deployment design intent with users and instead asks whether
+            operational maturity becomes visible as user-facing experience.
+          </p>
+
+          <div className="overflow-x-auto pb-2">
+            <table className="min-w-[1100px] border-collapse text-sm bg-white rounded-2xl overflow-hidden">
               <thead>
-                <tr>
-                  <th className="sticky left-0 bg-white text-left p-3 border-b border-slate-200 min-w-[180px] text-black font-bold">
-                    Organization Topic
+                <tr className="bg-blue-100">
+                  <th className="p-4 text-left text-black font-bold">
+                    Maturity Topic
                   </th>
-
-                  {hucasResults.map((factor) => (
-                    <th
-                      key={factor.factor}
-                      className="p-3 border-b border-slate-200 text-center min-w-[140px] text-black font-bold"
-                    >
-                      {factor.factor}
-                    </th>
-                  ))}
+                  <th className="p-4 text-left text-black font-bold">
+                    HuCAS Factor
+                  </th>
+                  <th className="p-4 text-center text-black font-bold">
+                    Org Post
+                  </th>
+                  <th className="p-4 text-center text-black font-bold">
+                    User Score
+                  </th>
+                  <th className="p-4 text-center text-black font-bold">
+                    Normalized Gap
+                  </th>
+                  <th className="p-4 text-center text-black font-bold">
+                    Alignment Type
+                  </th>
                 </tr>
               </thead>
 
               <tbody>
-                {maturityResults.map((topicRow, topicIndex) => (
-                  <tr key={topicIndex} className="border-b border-slate-100">
-                    <td className="sticky left-0 bg-white p-3 font-semibold text-slate-800">
-                      {topicRow.topic}
+                {alignmentData.map((item, index) => (
+                  <tr key={index} className="border-b border-blue-100">
+                    <td className="p-4 font-semibold text-slate-800">
+                      {item.topic}
                     </td>
-
-                    {hucasResults.map((factorRow, factorIndex) => {
-                      const orgValue = (topicRow.pre + topicRow.post) / 2;
-                      const userValue = factorRow.score;
-                      const gap = computeGap(orgValue, userValue);
-                      const label = getGapLabel(gap);
-                      const conflict = isCriticalConflict(orgValue, userValue);
-
-                      return (
-                        <td key={factorIndex} className="p-2 text-center">
-                          <div
-                            title={`${topicRow.topic} x ${
-                              factorRow.factor
-                            }: ${label} gap (${gap.toFixed(2)})${
-                              conflict ? " - Critical Perspective Conflict" : ""
-                            }`}
-                            className={`rounded-xl px-3 py-4 font-bold ${getGapStyle(
-                              gap
-                            )}`}
-                          >
-                            {label}
-
-                            <div className="text-xs mt-1">
-                              {gap.toFixed(2)}
-                            </div>
-                          </div>
-                        </td>
-                      );
-                    })}
+                    <td className="p-4 font-semibold text-slate-800">
+                      {item.factor}
+                    </td>
+                    <td className="p-4 text-center text-black font-semibold">
+                      {item.orgPost.toFixed(1)}
+                    </td>
+                    <td className="p-4 text-center text-black font-semibold">
+                      {item.userScore.toFixed(2)}
+                    </td>
+                    <td className="p-4 text-center text-black font-semibold">
+                      {item.gap.toFixed(2)}
+                    </td>
+                    <td className="p-4 text-center">
+                      <span
+                        className={`px-3 py-2 rounded-xl font-bold ${item.style}`}
+                        title={item.detail}
+                      >
+                        {item.label}
+                      </span>
+                    </td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
+
+          <p className="text-slate-600 mt-5 leading-relaxed">
+            The largest post-deployment/user perception gap is between{" "}
+            <strong>{biggestAlignmentGap?.topic}</strong> and{" "}
+            <strong>{biggestAlignmentGap?.factor}</strong>.
+          </p>
         </section>
 
-        <section className="mt-10 bg-indigo-50 border border-indigo-200 rounded-3xl p-8">
+        <section className="bg-slate-50 border border-slate-200 rounded-3xl p-8 mb-10">
           <h2 className="text-3xl font-bold text-slate-800 mb-6">
-            Research Insight Summary
+            4. Research Analytics
           </h2>
 
-          <div className="space-y-5 text-slate-700 leading-relaxed text-lg">
-            <p>
-              The integrated assessment reveals how organizational
-              Human-Centered AI maturity aligns, or fails to align, with
-              end-user perceptions across critical socio-technical dimensions.
-            </p>
+          <div className="grid grid-cols-1 xl:grid-cols-2 gap-8">
+            <div className="bg-white border border-slate-200 rounded-2xl p-6">
+              <h3 className="text-2xl font-bold text-slate-800 mb-4">
+                End-user Variance
+              </h3>
 
-            <p>
-              The strongest organizational maturity was observed in:
-              <span className="font-bold text-slate-900">
-                {" "}
-                {strongestMaturity?.topic}
-              </span>
-              .
-            </p>
+              <div className="h-[420px]">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart
+                    data={userVarianceData}
+                    margin={{ top: 20, right: 30, left: 10, bottom: 80 }}
+                  >
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis
+                      dataKey="factor"
+                      interval={0}
+                      angle={-25}
+                      textAnchor="end"
+                      height={90}
+                      tick={{ fill: "#111827", fontSize: 12 }}
+                    />
+                    <YAxis />
+                    <Tooltip />
+                    <Bar dataKey="variance" fill="#2563eb" />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
 
-            <p>
-              The lowest organizational maturity was observed in:
-              <span className="font-bold text-slate-900">
-                {" "}
-                {weakestMaturity?.topic}
-              </span>
-              .
-            </p>
-
-            <p>
-              End users reported the strongest perception in:
-              <span className="font-bold text-slate-900">
-                {" "}
-                {strongestUserFactor?.factor}
-              </span>
-              .
-            </p>
-
-            <p>
-              End users reported the weakest perception in:
-              <span className="font-bold text-slate-900">
-                {" "}
-                {weakestUserFactor?.factor}
-              </span>
-              .
-            </p>
-
-            {criticalConflicts.length > 0 && (
-              <p className="font-semibold text-red-700">
-                Critical perspective conflicts were detected. These indicate
-                cases where organizational maturity and end-user perception
-                point in opposite directions, requiring high organizational
-                attention.
+              <p className="text-slate-600 mt-4">
+                Highest user variance:{" "}
+                <strong>{highestUserVariance?.factor}</strong>.
               </p>
-            )}
+            </div>
 
+            <div className="bg-white border border-slate-200 rounded-2xl p-6">
+              <h3 className="text-2xl font-bold text-slate-800 mb-4">
+                Expert Disagreement
+              </h3>
+
+              <div className="h-[420px]">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart
+                    data={expertDisagreementData}
+                    margin={{ top: 20, right: 30, left: 10, bottom: 100 }}
+                  >
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis
+                      dataKey="topic"
+                      interval={0}
+                      angle={-25}
+                      textAnchor="end"
+                      height={110}
+                      tick={{ fill: "#111827", fontSize: 11 }}
+                    />
+                    <YAxis />
+                    <Tooltip />
+                    <Bar dataKey="variance" fill="#16a34a" />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+
+              <p className="text-slate-600 mt-4">
+                Highest expert disagreement:{" "}
+                <strong>{highestExpertDisagreement?.topic}</strong>.
+              </p>
+            </div>
+          </div>
+        </section>
+
+        <section className="bg-rose-50 border border-rose-200 rounded-3xl p-8 mb-10">
+          <h2 className="text-3xl font-bold text-slate-800 mb-6">
+            5. Structural Diagnosis Narrative
+          </h2>
+
+          <div className="grid grid-cols-1 gap-5">
+            {diagnosisNarratives.map((text, index) => (
+              <div
+                key={index}
+                className="bg-white border border-rose-100 rounded-2xl p-6"
+              >
+                <div className="text-sm font-bold text-rose-600 mb-2">
+                  Diagnostic Insight {index + 1}
+                </div>
+                <p className="text-slate-700 leading-relaxed">{text}</p>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        <section className="bg-indigo-50 border border-indigo-200 rounded-3xl p-8">
+          <h2 className="text-3xl font-bold text-slate-800 mb-6">
+            6. Final Integrated Summary
+          </h2>
+
+          <div className="bg-white border border-indigo-100 rounded-2xl p-6 space-y-5 text-slate-700 leading-relaxed">
             <p>
-              Overall findings suggest that important translation gaps may exist
-              between organizational governance mechanisms and real-world user
-              experience, particularly in areas where organizational maturity
-              remains high but user perception remains comparatively low.
+              This integrated assessment combines organizational HCAI maturity
+              evaluation with end-user experiential perception analysis.
             </p>
 
             <p>
-              These findings demonstrate the importance of combining outside-in
-              user assessment with inside-out organizational maturity evaluation
-              when assessing Human-Centered AI systems.
+              The organization achieved an overall maturity score of{" "}
+              <strong>{overallScore.toFixed(2)}</strong>, while end users
+              reported an average HuCAS score of{" "}
+              <strong>{averageUserScore.toFixed(2)}</strong>.
             </p>
+
+            <p>
+              Lifecycle drift analysis indicates that the most significant
+              internal maturity decline occurred in{" "}
+              <strong>{strongestDriftDecline?.topic}</strong>.
+            </p>
+
+            <p>
+              External alignment analysis identified the largest perception gap
+              between organizational maturity and user experience in{" "}
+              <strong>{biggestAlignmentGap?.topic}</strong>, associated with{" "}
+              <strong>{biggestAlignmentGap?.factor}</strong>.
+            </p>
+
+            <p>
+              User variance analysis suggests that{" "}
+              <strong>{highestUserVariance?.factor}</strong> exhibits the
+              greatest experiential inconsistency across participants.
+            </p>
+
+            <p>
+              Expert disagreement analysis indicates that{" "}
+              <strong>{highestExpertDisagreement?.topic}</strong> remains the
+              most contested organizational topic among expert evaluators.
+            </p>
+
+            <p>
+              Overall, the results suggest that HCAI governance effectiveness
+              should not only be evaluated through internal organizational
+              maturity, but also through whether these governance mechanisms
+              become visible, understandable, and experientially meaningful to
+              end users.
+            </p>
+          </div>
+
+          <div className="mt-8 flex flex-wrap gap-4">
+            <Link
+              href="/"
+              className="bg-slate-700 hover:bg-slate-800 text-white px-6 py-3 rounded-xl transition-all inline-block"
+            >
+              Back Home
+            </Link>
           </div>
         </section>
       </div>

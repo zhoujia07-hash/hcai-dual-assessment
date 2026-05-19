@@ -121,6 +121,19 @@ export default function OrganizationPage() {
   const [experts, setExperts] = useState<Expert[]>([]);
   const [submitted, setSubmitted] = useState(false);
 
+  const currentAnswers = answers[phase];
+
+  const preScore = calculateWeightedScore(answers.pre, weights);
+  const postScore = calculateWeightedScore(answers.post, weights);
+  const overallScore = (preScore + postScore) / 2;
+
+  const currentCompletedCount = currentAnswers.filter((v) => v >= 0).length;
+  const preCompletedCount = answers.pre.filter((v) => v >= 0).length;
+  const postCompletedCount = answers.post.filter((v) => v >= 0).length;
+
+  const assessmentMode =
+    experts.length > 0 ? "N-expert panel simulation" : "Single expert input";
+
   const selectLevel = (topicIndex: number, level: number) => {
     setAnswers((prev) => {
       const updated = [...prev[phase]];
@@ -162,32 +175,10 @@ export default function OrganizationPage() {
     setSubmitted(false);
   };
 
-  const simulateExpertPanel = () => {
-    const boundedCount = Math.min(Math.max(expertCount, 1), 20);
-    const generatedExperts = generateExpertPanel(boundedCount);
-
-    const consensusPre = computeConsensus(generatedExperts, "pre");
-    const consensusPost = computeConsensus(generatedExperts, "post");
-
-    setExpertCount(boundedCount);
-    setExperts(generatedExperts);
-    setAnswers({
-      pre: consensusPre,
-      post: consensusPost,
-    });
-
-    setSubmitted(false);
-
-    localStorage.setItem("organizationExperts", JSON.stringify(generatedExperts));
-    localStorage.setItem("organizationWeights", JSON.stringify(weights));
-  };
-
-  const submitAssessment = () => {
-    const preScore = calculateWeightedScore(answers.pre, weights);
-    const postScore = calculateWeightedScore(answers.post, weights);
-    const overallScore = (preScore + postScore) / 2;
-
-    setSubmitted(true);
+  const saveOrganizationResults = () => {
+    const savedPreScore = calculateWeightedScore(answers.pre, weights);
+    const savedPostScore = calculateWeightedScore(answers.post, weights);
+    const savedOverallScore = (savedPreScore + savedPostScore) / 2;
 
     localStorage.setItem(
       "organizationResults",
@@ -202,9 +193,9 @@ export default function OrganizationPage() {
           experts.length > 0
             ? "N-expert panel simulation"
             : "Single expert input",
-        preScore,
-        postScore,
-        overallScore,
+        preScore: savedPreScore,
+        postScore: savedPostScore,
+        overallScore: savedOverallScore,
       })
     );
 
@@ -215,20 +206,43 @@ export default function OrganizationPage() {
     } else {
       localStorage.removeItem("organizationExperts");
     }
+
+    setSubmitted(true);
   };
 
-  const currentAnswers = answers[phase];
+  const submitCurrentAssessment = () => {
+    saveOrganizationResults();
 
-  const preScore = calculateWeightedScore(answers.pre, weights);
-  const postScore = calculateWeightedScore(answers.post, weights);
-  const overallScore = (preScore + postScore) / 2;
+    alert(
+      "Single-expert assessment submitted successfully. To simulate a multi-expert organizational panel, please continue to the Optional Panel Configuration section below."
+    );
+  };
 
-  const currentCompletedCount = currentAnswers.filter((v) => v >= 0).length;
-  const preCompletedCount = answers.pre.filter((v) => v >= 0).length;
-  const postCompletedCount = answers.post.filter((v) => v >= 0).length;
+  const simulateExpertPanel = () => {
+    const boundedCount = Math.min(Math.max(expertCount, 1), 20);
+    const generatedExperts = generateExpertPanel(boundedCount);
 
-  const assessmentMode =
-    experts.length > 0 ? "N-expert panel simulation" : "Single expert input";
+    const consensusPre = computeConsensus(generatedExperts, "pre");
+    const consensusPost = computeConsensus(generatedExperts, "post");
+
+    setExpertCount(boundedCount);
+    setExperts(generatedExperts);
+    setAnswers({
+      pre: consensusPre,
+      post: consensusPost,
+    });
+
+    setSubmitted(true);
+
+    localStorage.setItem("organizationExperts", JSON.stringify(generatedExperts));
+    localStorage.setItem("organizationWeights", JSON.stringify(weights));
+  };
+
+  const submitOrganizationUserResults = () => {
+    saveOrganizationResults();
+
+    alert("Organization user results submitted successfully.");
+  };
 
   return (
     <main className="min-h-screen bg-slate-100 p-10">
@@ -255,45 +269,23 @@ export default function OrganizationPage() {
           </h2>
 
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-4">
-            <div className="bg-white rounded-2xl p-5 border border-green-100">
-              <div className="font-bold text-green-700 mb-2">Step 1</div>
-              <p className="text-slate-700">
-                Assemble a cross-functional evaluation panel, including UX,
-                engineering, compliance, operations, and domain experts.
-              </p>
-            </div>
-
-            <div className="bg-white rounded-2xl p-5 border border-green-100">
-              <div className="font-bold text-green-700 mb-2">Step 2</div>
-              <p className="text-slate-700">
-                Review evidence such as audit logs, red-teaming reports, user
-                feedback, governance records, and monitoring data.
-              </p>
-            </div>
-
-            <div className="bg-white rounded-2xl p-5 border border-green-100">
-              <div className="font-bold text-green-700 mb-2">Step 3</div>
-              <p className="text-slate-700">
-                Select one consensus maturity level from 0 to 5 for each topic
-                and lifecycle phase.
-              </p>
-            </div>
-
-            <div className="bg-white rounded-2xl p-5 border border-green-100">
-              <div className="font-bold text-green-700 mb-2">Step 4</div>
-              <p className="text-slate-700">
-                Apply topic weights based on the organization&apos;s risk
-                profile. This demo uses equal weights by default.
-              </p>
-            </div>
-
-            <div className="bg-white rounded-2xl p-5 border border-green-100">
-              <div className="font-bold text-green-700 mb-2">Step 5</div>
-              <p className="text-slate-700">
-                Compute pre-deployment, post-deployment, and overall maturity
-                scores.
-              </p>
-            </div>
+            {[
+              "Assemble a cross-functional evaluation panel, including UX, engineering, compliance, operations, and domain experts.",
+              "Review evidence such as audit logs, red-teaming reports, user feedback, governance records, and monitoring data.",
+              "Select one consensus maturity level from 0 to 5 for each topic and lifecycle phase.",
+              "Apply topic weights based on the organization’s risk profile. This demo uses equal weights by default.",
+              "Compute pre-deployment, post-deployment, and overall maturity scores.",
+            ].map((text, index) => (
+              <div
+                key={index}
+                className="bg-white rounded-2xl p-5 border border-green-100"
+              >
+                <div className="font-bold text-green-700 mb-2">
+                  Step {index + 1}
+                </div>
+                <p className="text-slate-700">{text}</p>
+              </div>
+            ))}
           </div>
         </section>
 
@@ -323,53 +315,6 @@ export default function OrganizationPage() {
                 <div>M_post = Σᵢ₌₁¹⁰(wᵢ × lᵢ,post) / Σᵢ₌₁¹⁰wᵢ</div>
                 <div>M_overall = (M_pre + M_post) / 2</div>
               </div>
-            </div>
-
-            <div className="bg-green-50 border border-green-200 rounded-2xl p-6">
-              <h3 className="text-2xl font-bold text-slate-800 mb-4">
-                Symbol Definitions
-              </h3>
-
-              <ul className="space-y-3 text-slate-700">
-                <li>
-                  <strong>p</strong>: lifecycle phase, where p ∈ {"{pre, post}"}
-                </li>
-                <li>
-                  <strong>i</strong>: HCAI topic index, where i ∈{" "}
-                  {"{1, ..., 10}"}
-                </li>
-                <li>
-                  <strong>j</strong>: expert index, where j ∈ {"{1, ..., N}"}
-                </li>
-                <li>
-                  <strong>N</strong>: total number of experts in the
-                  organizational evaluation panel
-                </li>
-                <li>
-                  <strong>lᵢ,ₚ,ⱼ</strong>: maturity level assigned by expert j
-                  for topic i in phase p
-                </li>
-                <li>
-                  <strong>lᵢ,ₚ</strong>: consensus maturity level for topic i in
-                  phase p
-                </li>
-                <li>
-                  <strong>wᵢ</strong>: weight assigned to topic i
-                </li>
-                <li>
-                  <strong>Mₚ</strong>: maturity score for phase p
-                </li>
-                <li>
-                  <strong>M_pre</strong>: pre-deployment maturity score
-                </li>
-                <li>
-                  <strong>M_post</strong>: post-deployment maturity score
-                </li>
-                <li>
-                  <strong>M_overall</strong>: overall organizational maturity
-                  score
-                </li>
-              </ul>
             </div>
           </div>
         </section>
@@ -494,7 +439,7 @@ export default function OrganizationPage() {
           </button>
 
           <button
-            onClick={submitAssessment}
+            onClick={submitCurrentAssessment}
             className="bg-green-600 hover:bg-green-700 text-white px-6 py-3 rounded-xl transition-all"
           >
             Submit Current Assessment
@@ -519,10 +464,6 @@ export default function OrganizationPage() {
                 Number of Experts
               </h3>
 
-              <label className="block text-slate-700 mb-2">
-                Enter panel size N
-              </label>
-
               <input
                 type="number"
                 min={1}
@@ -535,10 +476,6 @@ export default function OrganizationPage() {
                 }
                 className="w-full border border-slate-300 rounded-xl px-4 py-3 text-lg text-black placeholder:text-black"
               />
-
-              <p className="text-sm text-slate-500 mt-3">
-                Recommended demo range: 1-20 experts.
-              </p>
 
               <button
                 onClick={simulateExpertPanel}
@@ -561,12 +498,6 @@ export default function OrganizationPage() {
                   Reset Weights
                 </button>
               </div>
-
-              <p className="text-slate-600 mb-5">
-                Default weight is 1.0 for every topic. Increase a weight when a
-                topic is especially important for the organization&apos;s risk
-                profile.
-              </p>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {topics.map((topic, index) => (
@@ -597,12 +528,6 @@ export default function OrganizationPage() {
               <h3 className="text-2xl font-bold text-slate-800 mb-4">
                 Expert Panel Preview
               </h3>
-
-              <p className="text-slate-600 mb-5">
-                The simulated panel preserves each expert&apos;s raw pre- and
-                post-deployment maturity matrix. The consensus level for each
-                topic is calculated using the median across experts.
-              </p>
 
               <div className="overflow-x-auto pb-2">
                 <table className="min-w-[1200px] border-collapse text-sm">
@@ -644,13 +569,6 @@ export default function OrganizationPage() {
                   </tbody>
                 </table>
               </div>
-
-              <button
-                onClick={submitAssessment}
-                className="mt-6 bg-green-600 hover:bg-green-700 text-white px-6 py-3 rounded-xl transition-all"
-              >
-                Submit N-Expert Panel Assessment
-              </button>
             </div>
           )}
         </section>
@@ -670,7 +588,6 @@ export default function OrganizationPage() {
                 <div className="text-sm text-slate-500 mb-2">
                   Pre-deployment Score
                 </div>
-
                 <div className="text-4xl font-extrabold text-green-700">
                   {preScore.toFixed(2)}
                 </div>
@@ -680,7 +597,6 @@ export default function OrganizationPage() {
                 <div className="text-sm text-slate-500 mb-2">
                   Post-deployment Score
                 </div>
-
                 <div className="text-4xl font-extrabold text-green-700">
                   {postScore.toFixed(2)}
                 </div>
@@ -690,27 +606,10 @@ export default function OrganizationPage() {
                 <div className="text-sm text-slate-500 mb-2">
                   Overall Maturity Score
                 </div>
-
                 <div className="text-4xl font-extrabold text-green-700">
                   {overallScore.toFixed(2)}
                 </div>
               </div>
-            </div>
-
-            <div className="bg-white border border-green-100 rounded-2xl p-6 mb-8">
-              <h3 className="text-2xl font-bold text-slate-800 mb-4">
-                Calculation Explanation
-              </h3>
-
-              <p className="text-slate-700 leading-relaxed">
-                The current calculation uses the topic weights shown above. If
-                an expert panel was simulated, each topic&apos;s consensus level
-                is calculated as the median of the expert ratings. The
-                pre-deployment and post-deployment maturity scores are weighted
-                averages of the consensus levels. The overall organizational
-                maturity score is the arithmetic mean of the two phase-specific
-                scores.
-              </p>
             </div>
 
             <div className="overflow-x-auto pb-2">
@@ -720,23 +619,18 @@ export default function OrganizationPage() {
                     <th className="p-4 text-left text-black font-bold min-w-[360px]">
                       Topic
                     </th>
-
                     <th className="p-4 text-center text-black font-bold min-w-[120px]">
                       Weight
                     </th>
-
                     <th className="p-4 text-center text-black font-bold min-w-[160px]">
                       Pre Consensus
                     </th>
-
                     <th className="p-4 text-center text-black font-bold min-w-[160px]">
                       Post Consensus
                     </th>
-
                     <th className="p-4 text-center text-black font-bold min-w-[160px]">
                       Weighted Pre
                     </th>
-
                     <th className="p-4 text-center text-black font-bold min-w-[160px]">
                       Weighted Post
                     </th>
@@ -789,7 +683,14 @@ export default function OrganizationPage() {
               </table>
             </div>
 
-            <div className="mt-8">
+            <div className="mt-8 flex flex-wrap gap-4">
+              <button
+                onClick={submitOrganizationUserResults}
+                className="bg-green-600 hover:bg-green-700 text-white px-6 py-3 rounded-xl transition-all"
+              >
+                Submit Organization User Results
+              </button>
+
               <Link
                 href="/"
                 className="bg-slate-700 hover:bg-slate-800 text-white px-6 py-3 rounded-xl transition-all inline-block"
