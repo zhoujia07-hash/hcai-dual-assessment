@@ -5,6 +5,13 @@ import Link from "next/link";
 
 type Phase = "pre" | "post";
 
+type Expert = {
+  id: string;
+  role: string;
+  pre: number[];
+  post: number[];
+};
+
 const levelLabels = [
   "Level 0: Absent",
   "Level 1: Initial / Ad hoc",
@@ -19,7 +26,7 @@ const topics = [
   "Human-Centered Design Integration",
   "Fairness, Ethics & Diversity",
   "Security, Privacy & Safety",
-  "Explainability & Transparency",
+  "Transparency & Explainability",
   "Human Oversight & Control",
   "Environmental Impact & Societal Well-Being",
   "Performance, Robustness & Reliability",
@@ -36,7 +43,16 @@ const levelDescriptions = [
   "Captured results are systematically used for continuous improvement.",
 ];
 
-const defaultWeights = Array(topics.length).fill(1);
+const expertRoles = [
+  "UX",
+  "Engineering",
+  "Compliance",
+  "Operations",
+  "Governance",
+  "Domain Expert",
+  "Data Science",
+  "Risk Management",
+];
 
 function calculateWeightedScore(levels: number[], weights: number[]) {
   const validItems = levels
@@ -58,6 +74,40 @@ function calculateWeightedScore(levels: number[], weights: number[]) {
   return weightedSum / totalWeight;
 }
 
+function median(values: number[]) {
+  const validValues = values.filter((value) => value >= 0).sort((a, b) => a - b);
+
+  if (validValues.length === 0) return -1;
+
+  const middle = Math.floor(validValues.length / 2);
+
+  if (validValues.length % 2 === 0) {
+    return (validValues[middle - 1] + validValues[middle]) / 2;
+  }
+
+  return validValues[middle];
+}
+
+function computeConsensus(experts: Expert[], phase: Phase) {
+  return topics.map((_, topicIndex) => {
+    const topicValues = experts.map((expert) => expert[phase][topicIndex]);
+    return median(topicValues);
+  });
+}
+
+function generateExpertPanel(count: number) {
+  return Array.from({ length: count }, (_, index) => {
+    const role = expertRoles[index % expertRoles.length];
+
+    return {
+      id: `Expert ${index + 1}`,
+      role,
+      pre: topics.map(() => Math.floor(Math.random() * 6)),
+      post: topics.map(() => Math.floor(Math.random() * 6)),
+    };
+  });
+}
+
 export default function OrganizationPage() {
   const [phase, setPhase] = useState<Phase>("pre");
 
@@ -66,9 +116,10 @@ export default function OrganizationPage() {
     post: Array(topics.length).fill(-1),
   });
 
+  const [weights, setWeights] = useState<number[]>(Array(topics.length).fill(1));
+  const [expertCount, setExpertCount] = useState(3);
+  const [experts, setExperts] = useState<Expert[]>([]);
   const [submitted, setSubmitted] = useState(false);
-
-  const weights = defaultWeights;
 
   const selectLevel = (topicIndex: number, level: number) => {
     setAnswers((prev) => {
@@ -84,13 +135,51 @@ export default function OrganizationPage() {
     setSubmitted(false);
   };
 
+  const updateWeight = (topicIndex: number, value: number) => {
+    const safeValue = Number.isFinite(value) && value > 0 ? value : 1;
+
+    setWeights((prev) => {
+      const updated = [...prev];
+      updated[topicIndex] = safeValue;
+      return updated;
+    });
+
+    setSubmitted(false);
+  };
+
+  const resetWeights = () => {
+    setWeights(Array(topics.length).fill(1));
+    setSubmitted(false);
+  };
+
   const autoComplete = () => {
     setAnswers((prev) => ({
       ...prev,
       [phase]: topics.map(() => Math.floor(Math.random() * 6)),
     }));
 
+    setExperts([]);
     setSubmitted(false);
+  };
+
+  const simulateExpertPanel = () => {
+    const boundedCount = Math.min(Math.max(expertCount, 1), 20);
+    const generatedExperts = generateExpertPanel(boundedCount);
+
+    const consensusPre = computeConsensus(generatedExperts, "pre");
+    const consensusPost = computeConsensus(generatedExperts, "post");
+
+    setExpertCount(boundedCount);
+    setExperts(generatedExperts);
+    setAnswers({
+      pre: consensusPre,
+      post: consensusPost,
+    });
+
+    setSubmitted(false);
+
+    localStorage.setItem("organizationExperts", JSON.stringify(generatedExperts));
+    localStorage.setItem("organizationWeights", JSON.stringify(weights));
   };
 
   const submitAssessment = () => {
@@ -107,11 +196,25 @@ export default function OrganizationPage() {
         pre: answers.pre,
         post: answers.post,
         weights,
+        expertCount: experts.length > 0 ? experts.length : 1,
+        experts,
+        mode:
+          experts.length > 0
+            ? "N-expert panel simulation"
+            : "Single expert input",
         preScore,
         postScore,
         overallScore,
       })
     );
+
+    localStorage.setItem("organizationWeights", JSON.stringify(weights));
+
+    if (experts.length > 0) {
+      localStorage.setItem("organizationExperts", JSON.stringify(experts));
+    } else {
+      localStorage.removeItem("organizationExperts");
+    }
   };
 
   const currentAnswers = answers[phase];
@@ -123,6 +226,9 @@ export default function OrganizationPage() {
   const currentCompletedCount = currentAnswers.filter((v) => v >= 0).length;
   const preCompletedCount = answers.pre.filter((v) => v >= 0).length;
   const postCompletedCount = answers.post.filter((v) => v >= 0).length;
+
+  const assessmentMode =
+    experts.length > 0 ? "N-expert panel simulation" : "Single expert input";
 
   return (
     <main className="min-h-screen bg-slate-100 p-10">
@@ -177,7 +283,7 @@ export default function OrganizationPage() {
               <div className="font-bold text-green-700 mb-2">Step 4</div>
               <p className="text-slate-700">
                 Apply topic weights based on the organization&apos;s risk
-                profile. 
+                profile. This demo uses equal weights by default.
               </p>
             </div>
 
@@ -191,106 +297,82 @@ export default function OrganizationPage() {
           </div>
         </section>
 
-       <section className="bg-slate-50 border border-slate-200 rounded-3xl p-8 mb-10">
-  <h2 className="text-3xl font-bold text-slate-800 mb-4">
-    Maturity Score Formula
-  </h2>
+        <section className="bg-slate-50 border border-slate-200 rounded-3xl p-8 mb-10">
+          <h2 className="text-3xl font-bold text-slate-800 mb-4">
+            Maturity Score Formula
+          </h2>
 
-  <div className="space-y-6 text-slate-700 text-lg leading-relaxed">
-    <p>
-      After the organization selects a consensus maturity level for each topic
-      in both lifecycle phases, the system computes phase-specific maturity
-      scores using a weighted linear additive model. The overall organizational
-      maturity score is then calculated by averaging the pre-deployment and
-      post-deployment scores.
-    </p>
+          <div className="space-y-6 text-slate-700 text-lg leading-relaxed">
+            <p>
+              After the organization selects a consensus maturity level for each
+              topic in both lifecycle phases, the system computes phase-specific
+              maturity scores using a weighted linear additive model. The
+              overall organizational maturity score is then calculated by
+              averaging the pre-deployment and post-deployment scores.
+            </p>
 
-    <div className="bg-white border border-slate-200 rounded-2xl p-6">
-      <h3 className="text-2xl font-bold text-slate-800 mb-4">
-        Mathematical Formulation
-      </h3>
+            <div className="bg-white border border-slate-200 rounded-2xl p-6">
+              <h3 className="text-2xl font-bold text-slate-800 mb-4">
+                Mathematical Formulation
+              </h3>
 
-      <div className="bg-slate-100 rounded-xl p-5 font-mono text-slate-900 text-base space-y-3">
-        <div>
-          lᵢ,ₚ = Consensus(lᵢ,ₚ,₁, lᵢ,ₚ,₂, ..., lᵢ,ₚ,ₙ)
-        </div>
+              <div className="bg-slate-100 rounded-xl p-5 font-mono text-slate-900 text-base space-y-3">
+                <div>lᵢ,ₚ = Consensus(lᵢ,ₚ,₁, lᵢ,ₚ,₂, ..., lᵢ,ₚ,ₙ)</div>
+                <div>Mₚ = Σᵢ₌₁¹⁰(wᵢ × lᵢ,ₚ) / Σᵢ₌₁¹⁰wᵢ</div>
+                <div>M_pre = Σᵢ₌₁¹⁰(wᵢ × lᵢ,pre) / Σᵢ₌₁¹⁰wᵢ</div>
+                <div>M_post = Σᵢ₌₁¹⁰(wᵢ × lᵢ,post) / Σᵢ₌₁¹⁰wᵢ</div>
+                <div>M_overall = (M_pre + M_post) / 2</div>
+              </div>
+            </div>
 
-        <div>
-          Mₚ = Σᵢ₌₁¹⁰(wᵢ × lᵢ,ₚ) / Σᵢ₌₁¹⁰wᵢ
-        </div>
+            <div className="bg-green-50 border border-green-200 rounded-2xl p-6">
+              <h3 className="text-2xl font-bold text-slate-800 mb-4">
+                Symbol Definitions
+              </h3>
 
-        <div>
-          M_pre = Σᵢ₌₁¹⁰(wᵢ × lᵢ,pre) / Σᵢ₌₁¹⁰wᵢ
-        </div>
-
-        <div>
-          M_post = Σᵢ₌₁¹⁰(wᵢ × lᵢ,post) / Σᵢ₌₁¹⁰wᵢ
-        </div>
-
-        <div>
-          M_overall = (M_pre + M_post) / 2
-        </div>
-      </div>
-
-     
-    </div>
-
-    <div className="bg-green-50 border border-green-200 rounded-2xl p-6">
-      <h3 className="text-2xl font-bold text-slate-800 mb-4">
-        Symbol Definitions
-      </h3>
-
-      <ul className="space-y-3 text-slate-700">
-        <li>
-          <strong>p</strong>: lifecycle phase, where p ∈ {"{pre, post}"}
-        </li>
-
-        <li>
-          <strong>i</strong>: HCAI topic index, where i ∈ {"{1, ..., 10}"}
-        </li>
-
-        <li>
-          <strong>j</strong>: expert index, where j ∈ {"{1, ..., N}"}
-        </li>
-
-        <li>
-          <strong>N</strong>: total number of experts in the organizational
-          evaluation panel
-        </li>
-
-        <li>
-          <strong>lᵢ,ₚ,ⱼ</strong>: maturity level assigned by expert j for
-          topic i in phase p
-        </li>
-
-        <li>
-          <strong>lᵢ,ₚ</strong>: consensus maturity level for topic i in
-          phase p
-        </li>
-
-        <li>
-          <strong>wᵢ</strong>: weight assigned to topic i
-        </li>
-
-        <li>
-          <strong>Mₚ</strong>: maturity score for phase p
-        </li>
-
-        <li>
-          <strong>M_pre</strong>: pre-deployment maturity score
-        </li>
-
-        <li>
-          <strong>M_post</strong>: post-deployment maturity score
-        </li>
-
-        <li>
-          <strong>M_overall</strong>: overall organizational maturity score
-        </li>
-      </ul>
-    </div>
-  </div>
-</section>
+              <ul className="space-y-3 text-slate-700">
+                <li>
+                  <strong>p</strong>: lifecycle phase, where p ∈ {"{pre, post}"}
+                </li>
+                <li>
+                  <strong>i</strong>: HCAI topic index, where i ∈{" "}
+                  {"{1, ..., 10}"}
+                </li>
+                <li>
+                  <strong>j</strong>: expert index, where j ∈ {"{1, ..., N}"}
+                </li>
+                <li>
+                  <strong>N</strong>: total number of experts in the
+                  organizational evaluation panel
+                </li>
+                <li>
+                  <strong>lᵢ,ₚ,ⱼ</strong>: maturity level assigned by expert j
+                  for topic i in phase p
+                </li>
+                <li>
+                  <strong>lᵢ,ₚ</strong>: consensus maturity level for topic i in
+                  phase p
+                </li>
+                <li>
+                  <strong>wᵢ</strong>: weight assigned to topic i
+                </li>
+                <li>
+                  <strong>Mₚ</strong>: maturity score for phase p
+                </li>
+                <li>
+                  <strong>M_pre</strong>: pre-deployment maturity score
+                </li>
+                <li>
+                  <strong>M_post</strong>: post-deployment maturity score
+                </li>
+                <li>
+                  <strong>M_overall</strong>: overall organizational maturity
+                  score
+                </li>
+              </ul>
+            </div>
+          </div>
+        </section>
 
         <div className="flex gap-4 mb-10">
           <button
@@ -323,25 +405,24 @@ export default function OrganizationPage() {
         </div>
 
         <div className="bg-white border border-slate-200 rounded-2xl p-5 mb-8 space-y-3">
-  <p className="text-slate-700">
-    Current phase:{" "}
-    <strong>
-      {phase === "pre" ? "Pre-deployment" : "Post-deployment"}
-    </strong>
-    . Completed topics in this phase:{" "}
-    <strong>{currentCompletedCount}/10</strong>. Pre completed:{" "}
-    <strong>{preCompletedCount}/10</strong>. Post completed:{" "}
-    <strong>{postCompletedCount}/10</strong>.
-  </p>
+          <p className="text-slate-700">
+            Current phase:{" "}
+            <strong>
+              {phase === "pre" ? "Pre-deployment" : "Post-deployment"}
+            </strong>
+            . Completed topics in this phase:{" "}
+            <strong>{currentCompletedCount}/10</strong>. Pre completed:{" "}
+            <strong>{preCompletedCount}/10</strong>. Post completed:{" "}
+            <strong>{postCompletedCount}/10</strong>.
+          </p>
 
-  <div className="bg-blue-50 border border-blue-100 rounded-xl p-4 text-slate-700 text-sm leading-relaxed">
-    <strong>Demo simplification note:</strong> In a full organizational
-    assessment, multiple experts (N-expert panel) would independently assess
-    evidence and produce consensus maturity levels. To support dynamic
-    interaction and real-time visualization, this demo simulates the input of
-    a single expert only. This demo uses equal weights by default.
-  </div>
-</div>
+          <div className="bg-blue-50 border border-blue-100 rounded-xl p-4 text-slate-700 text-sm leading-relaxed">
+            <strong>Current mode:</strong> {assessmentMode}. Complete both
+            pre- and post-deployment ratings first. You can then either submit
+            the current single-expert assessment or optionally simulate an
+            N-expert panel below.
+          </div>
+        </div>
 
         <div className="space-y-8">
           {topics.map((topic, topicIndex) => (
@@ -404,21 +485,175 @@ export default function OrganizationPage() {
           ))}
         </div>
 
-        <div className="flex flex-wrap gap-4 mt-12">
+        <div className="flex flex-wrap gap-4 mt-12 mb-10">
           <button
             onClick={autoComplete}
             className="bg-slate-800 hover:bg-slate-900 text-white px-6 py-3 rounded-xl transition-all"
           >
-            Auto Complete All Questions
+            Auto Complete Current Phase
           </button>
 
           <button
             onClick={submitAssessment}
             className="bg-green-600 hover:bg-green-700 text-white px-6 py-3 rounded-xl transition-all"
           >
-            Submit Assessment
+            Submit Current Assessment
           </button>
         </div>
+
+        <section className="bg-emerald-50 border border-emerald-200 rounded-3xl p-8 mb-10">
+          <h2 className="text-3xl font-bold text-slate-800 mb-6">
+            Optional Panel Configuration
+          </h2>
+
+          <p className="text-slate-700 mb-6">
+            This optional section simulates a cross-functional N-expert panel.
+            You can enter the panel size and adjust topic weights. The system
+            generates N expert rating matrices and computes consensus maturity
+            levels using the median.
+          </p>
+
+          <div className="grid grid-cols-1 xl:grid-cols-3 gap-8">
+            <div className="bg-white rounded-2xl border border-emerald-100 p-6">
+              <h3 className="text-xl font-bold text-slate-800 mb-4">
+                Number of Experts
+              </h3>
+
+              <label className="block text-slate-700 mb-2">
+                Enter panel size N
+              </label>
+
+              <input
+                type="number"
+                min={1}
+                max={20}
+                value={expertCount}
+                onChange={(event) =>
+                  setExpertCount(
+                    Math.min(Math.max(Number(event.target.value), 1), 20)
+                  )
+                }
+                className="w-full border border-slate-300 rounded-xl px-4 py-3 text-lg text-black placeholder:text-black"
+              />
+
+              <p className="text-sm text-slate-500 mt-3">
+                Recommended demo range: 1-20 experts.
+              </p>
+
+              <button
+                onClick={simulateExpertPanel}
+                className="mt-5 bg-emerald-600 hover:bg-emerald-700 text-white px-6 py-3 rounded-xl transition-all"
+              >
+                Simulate N-Expert Panel
+              </button>
+            </div>
+
+            <div className="xl:col-span-2 bg-white rounded-2xl border border-emerald-100 p-6">
+              <div className="flex justify-between items-center mb-4">
+                <h3 className="text-xl font-bold text-slate-800">
+                  Topic Weights
+                </h3>
+
+                <button
+                  onClick={resetWeights}
+                  className="bg-slate-800 hover:bg-slate-900 text-white px-4 py-2 rounded-xl text-sm"
+                >
+                  Reset Weights
+                </button>
+              </div>
+
+              <p className="text-slate-600 mb-5">
+                Default weight is 1.0 for every topic. Increase a weight when a
+                topic is especially important for the organization&apos;s risk
+                profile.
+              </p>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {topics.map((topic, index) => (
+                  <div
+                    key={topic}
+                    className="flex items-center justify-between gap-4 bg-slate-50 border border-slate-200 rounded-xl p-4"
+                  >
+                    <span className="font-medium text-slate-800">{topic}</span>
+
+                    <input
+                      type="number"
+                      min={0.1}
+                      step={0.1}
+                      value={weights[index]}
+                      onChange={(event) =>
+                        updateWeight(index, Number(event.target.value))
+                      }
+                      className="w-24 border border-slate-300 rounded-lg px-3 py-2 text-center text-black placeholder:text-black"
+                    />
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {experts.length > 0 && (
+            <div className="mt-8 bg-white border border-emerald-100 rounded-2xl p-6">
+              <h3 className="text-2xl font-bold text-slate-800 mb-4">
+                Expert Panel Preview
+              </h3>
+
+              <p className="text-slate-600 mb-5">
+                The simulated panel preserves each expert&apos;s raw pre- and
+                post-deployment maturity matrix. The consensus level for each
+                topic is calculated using the median across experts.
+              </p>
+
+              <div className="overflow-x-auto pb-2">
+                <table className="min-w-[1200px] border-collapse text-sm">
+                  <thead>
+                    <tr className="bg-emerald-100">
+                      <th className="p-3 text-left text-black font-bold min-w-[140px]">
+                        Expert
+                      </th>
+                      <th className="p-3 text-left text-black font-bold min-w-[160px]">
+                        Role
+                      </th>
+                      <th className="p-3 text-left text-black font-bold min-w-[420px]">
+                        Pre Ratings
+                      </th>
+                      <th className="p-3 text-left text-black font-bold min-w-[420px]">
+                        Post Ratings
+                      </th>
+                    </tr>
+                  </thead>
+
+                  <tbody>
+                    {experts.map((expert) => (
+                      <tr
+                        key={expert.id}
+                        className="border-b border-emerald-100"
+                      >
+                        <td className="p-3 font-semibold text-slate-800">
+                          {expert.id}
+                        </td>
+                        <td className="p-3 text-slate-700">{expert.role}</td>
+                        <td className="p-3 text-slate-700 whitespace-nowrap">
+                          [{expert.pre.join(", ")}]
+                        </td>
+                        <td className="p-3 text-slate-700 whitespace-nowrap">
+                          [{expert.post.join(", ")}]
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              <button
+                onClick={submitAssessment}
+                className="mt-6 bg-green-600 hover:bg-green-700 text-white px-6 py-3 rounded-xl transition-all"
+              >
+                Submit N-Expert Panel Assessment
+              </button>
+            </div>
+          )}
+        </section>
 
         {submitted && (
           <section className="mt-12 bg-green-50 border border-green-200 rounded-3xl p-8">
@@ -426,11 +661,16 @@ export default function OrganizationPage() {
               Maturity Score Calculation
             </h2>
 
+            <div className="mb-6 bg-white border border-green-100 rounded-2xl p-5 text-slate-700">
+              <strong>Assessment mode:</strong> {assessmentMode}
+            </div>
+
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
               <div className="bg-white border border-green-100 rounded-2xl p-6">
                 <div className="text-sm text-slate-500 mb-2">
                   Pre-deployment Score
                 </div>
+
                 <div className="text-4xl font-extrabold text-green-700">
                   {preScore.toFixed(2)}
                 </div>
@@ -440,6 +680,7 @@ export default function OrganizationPage() {
                 <div className="text-sm text-slate-500 mb-2">
                   Post-deployment Score
                 </div>
+
                 <div className="text-4xl font-extrabold text-green-700">
                   {postScore.toFixed(2)}
                 </div>
@@ -449,6 +690,7 @@ export default function OrganizationPage() {
                 <div className="text-sm text-slate-500 mb-2">
                   Overall Maturity Score
                 </div>
+
                 <div className="text-4xl font-extrabold text-green-700">
                   {overallScore.toFixed(2)}
                 </div>
@@ -461,35 +703,41 @@ export default function OrganizationPage() {
               </h3>
 
               <p className="text-slate-700 leading-relaxed">
-                The current calculation uses equal weights for all 10 topics.
-                The pre-deployment maturity score is the weighted average of all
-                selected pre-deployment levels. The post-deployment maturity
-                score is calculated in the same way. The overall organizational
-                maturity score is the arithmetic mean of the pre-deployment and
-                post-deployment scores.
+                The current calculation uses the topic weights shown above. If
+                an expert panel was simulated, each topic&apos;s consensus level
+                is calculated as the median of the expert ratings. The
+                pre-deployment and post-deployment maturity scores are weighted
+                averages of the consensus levels. The overall organizational
+                maturity score is the arithmetic mean of the two phase-specific
+                scores.
               </p>
             </div>
 
-            <div className="overflow-x-auto">
-              <table className="w-full border-collapse text-sm bg-white rounded-2xl overflow-hidden">
+            <div className="overflow-x-auto pb-2">
+              <table className="min-w-[1200px] border-collapse text-sm bg-white rounded-2xl overflow-hidden">
                 <thead>
                   <tr className="bg-green-100">
-                    <th className="p-3 text-left text-black font-bold">
+                    <th className="p-4 text-left text-black font-bold min-w-[360px]">
                       Topic
                     </th>
-                    <th className="p-3 text-center text-black font-bold">
+
+                    <th className="p-4 text-center text-black font-bold min-w-[120px]">
                       Weight
                     </th>
-                    <th className="p-3 text-center text-black font-bold">
-                      Pre Level
+
+                    <th className="p-4 text-center text-black font-bold min-w-[160px]">
+                      Pre Consensus
                     </th>
-                    <th className="p-3 text-center text-black font-bold">
-                      Post Level
+
+                    <th className="p-4 text-center text-black font-bold min-w-[160px]">
+                      Post Consensus
                     </th>
-                    <th className="p-3 text-center text-black font-bold">
+
+                    <th className="p-4 text-center text-black font-bold min-w-[160px]">
                       Weighted Pre
                     </th>
-                    <th className="p-3 text-center text-black font-bold">
+
+                    <th className="p-4 text-center text-black font-bold min-w-[160px]">
                       Weighted Post
                     </th>
                   </tr>
@@ -503,27 +751,33 @@ export default function OrganizationPage() {
 
                     return (
                       <tr key={topic} className="border-b border-green-100">
-                        <td className="p-3 font-medium text-slate-800">
+                        <td className="p-4 font-semibold text-slate-800 min-w-[360px]">
                           {topic}
                         </td>
 
-                        <td className="p-3 text-center">{weight}</td>
-
-                        <td className="p-3 text-center">
-                          {preLevel >= 0 ? preLevel : "Not selected"}
+                        <td className="p-4 text-center text-black font-semibold">
+                          {weight.toFixed(1)}
                         </td>
 
-                        <td className="p-3 text-center">
-                          {postLevel >= 0 ? postLevel : "Not selected"}
+                        <td className="p-4 text-center text-black font-semibold">
+                          {preLevel >= 0
+                            ? preLevel.toFixed(1)
+                            : "Not selected"}
                         </td>
 
-                        <td className="p-3 text-center">
+                        <td className="p-4 text-center text-black font-semibold">
+                          {postLevel >= 0
+                            ? postLevel.toFixed(1)
+                            : "Not selected"}
+                        </td>
+
+                        <td className="p-4 text-center text-black font-semibold">
                           {preLevel >= 0
                             ? (preLevel * weight).toFixed(2)
                             : "-"}
                         </td>
 
-                        <td className="p-3 text-center">
+                        <td className="p-4 text-center text-black font-semibold">
                           {postLevel >= 0
                             ? (postLevel * weight).toFixed(2)
                             : "-"}
@@ -535,17 +789,10 @@ export default function OrganizationPage() {
               </table>
             </div>
 
-            <div className="mt-8 flex flex-wrap gap-4">
-              <Link
-                href="/results"
-                className="bg-purple-600 hover:bg-purple-700 text-white px-6 py-3 rounded-xl transition-all"
-              >
-                Diagnose the Impact Gap
-              </Link>
-
+            <div className="mt-8">
               <Link
                 href="/"
-                className="bg-slate-700 hover:bg-slate-800 text-white px-6 py-3 rounded-xl transition-all"
+                className="bg-slate-700 hover:bg-slate-800 text-white px-6 py-3 rounded-xl transition-all inline-block"
               >
                 Back Home
               </Link>
